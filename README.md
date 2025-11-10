@@ -1,68 +1,80 @@
 local imgui = require "mimgui"
 local faicons = require "fAwesome6"
 local json = require "json"
-local a = require 'lib.samp.events'
+local eventos = require 'lib.samp.events'
 
-local imageConfig = {
-    enabled = imgui.new.bool(false),
-    x = imgui.new.int(100),
-    y = imgui.new.int(100),
-    width = imgui.new.int(200),
-    height = imgui.new.int(200),
-    texture = nil,
-    texture2 = nil,
-    path = getWorkingDirectory() .. "/lib/Voip/shellder.png",
-    path2 = getWorkingDirectory() .. "/lib/Voip/shellder2.png",
-    currentTexture = nil,
-    voipActive = false
+local configPadrao = {
+    estiloHUD = 0,
+    vidaX = 1479,
+    vidaY = 92,
+    coleteX = 1479,
+    coleteY = 134,
+    dinheiroX = 1551,
+    dinheiroY = 175,
+    vidaLargura = 50,
+    vidaAltura = 29,
+    coleteLargura = 50,
+    coleteAltura = 29,
+    tamanhoDinheiro = 63.0,
+    tamanhoBordaDinheiro = 1.0,
+    raioBorda = 6.8,
+    corVida = {0.1, 0.3, 0.8, 1.0},
+    corColete = {0.6, 0.6, 0.6, 1.0},
+    corDinheiro = {1.0, 1.0, 1.0, 1.0},
+    corBordaDinheiro = {0.0, 0.0, 0.0, 1.0},
+    deslocamentoIconeX = -35,
+    deslocamentoIconeY = 0,
+    tamanhoIcone = 18.0,
+    corFonte = {1.0, 1.0, 1.0, 1.0},
+    tamanhoFonteHP = 13.0,
+    tamanhoFonteAP = 13.0,
+    tamanhoFonteDinheiro = 13.0,
+    fonteHPX = 10,
+    fonteHPY = 7,
+    fonteAPX = 10,
+    fonteAPY = 7,
+    bordaAtivada = true,
+    tamanhoBorda = 2.0,
+    corBorda = {1.0, 1.0, 1.0, 1.0},
+    miraAtivada = true,
+    miraX = 0,
+    miraY = 0,
+    miraTamanho = 10.0,
+    miraLargura = 2.0,
+    corMira = {1.0, 1.0, 1.0, 1.0},
+    miraBordaAtivada = true,
+    miraTamanhoBorda = 1.0,
+    corBordaMira = {0.0, 0.0, 0.0, 1.0},
+    miraTipo = 1,
+    tempoId = 12,
+    climaId = 0,
+    climaAtivo = false,
+    fakePcAtivo = false,
+    fovAtivado = false,
+    valorFov = 60,
+    somenteNumerosHPAP = false,
+    emojisAtivados = true,
 }
 
-local buttonConfig = {
-    enabled = imgui.new.bool(true),
-    x = imgui.new.int(50),
-    y = imgui.new.int(50),
-    size = imgui.new.int(60),
-    color = imgui.new.float[4](0.0, 0.0, 0.0, 0.5),
-    hoverColor = imgui.new.float[4](0.0, 0.0, 0.0, 0.7),
-    activeColor = imgui.new.float[4](0.0, 0.0, 0.0, 0.9)
+local config = {}
+for k, v in pairs(configPadrao) do
+    config[k] = v
+end
+
+local estado = {
+    vida = 100.0,
+    colete = 100.0,
+    dinheiro = 0,
+    modoEdicao = imgui.new.bool(false),
+    opacidadeTexto = imgui.new.float(1.0),
+    direcaoFade = 1,
+    indiceCor = 1,
+    ultimoSalvamento = os.clock(),
+    versaoFakePc = "0.3.7",
+    ultimoTempoSyncDesocupado = 0
 }
 
-local function loadImageTexture()
-    if doesFileExist(imageConfig.path) then
-        if imageConfig.texture then
-            imgui.DestroyTexture(imageConfig.texture)
-        end
-        imageConfig.texture = imgui.CreateTextureFromFile(imageConfig.path)
-    end
-    
-    if doesFileExist(imageConfig.path2) then
-        if imageConfig.texture2 then
-            imgui.DestroyTexture(imageConfig.texture2)
-        end
-        imageConfig.texture2 = imgui.CreateTextureFromFile(imageConfig.path2)
-    end
-    
-    imageConfig.currentTexture = imageConfig.texture
-end
-
-local function toggleVoip()
-    imageConfig.voipActive = not imageConfig.voipActive
-    if imageConfig.voipActive then
-        imageConfig.currentTexture = imageConfig.texture2
-    else
-        imageConfig.currentTexture = imageConfig.texture
-    end
-end
-
-local vida = 100.0
-local colete = 100.0
-local dinheiro = 0
-local editMode = imgui.new.bool(false)
-
-local shellderTextOpacity = imgui.new.float(1.0)
-local shellderFadeDirection = 1
-local shellderColorIndex = 1
-local shellderColorList = {
+local listaCores = {
     {0.8, 0.8, 0.8, 1.0},
     {1.0, 1.0, 1.0, 1.0},
     {0.6, 0.4, 0.2, 1.0},
@@ -71,20 +83,7 @@ local shellderColorList = {
     {1.0, 0.0, 1.0, 1.0}
 }
 
-local miraConfig = {
-    enabled = true,
-    x = 0,
-    y = 0,
-    size = 10.0,
-    width = 2.0,
-    color = {1.0, 1.0, 1.0, 1.0},
-    borderEnabled = true,
-    borderSize = 1.0,
-    borderColor = {0.0, 0.0, 0.0, 1.0},
-    tipo = 1
-}
-
-local miraTipos = {
+local tiposMira = {
     "Cruz Simples",
     "Cruz Dupla", 
     "Circulo",
@@ -94,127 +93,95 @@ local miraTipos = {
     "Alvo",
     "Diamante",
     "Estrela",
-    "Triangulo"
+    "Triangulo",
+    -- NOVAS MIRAS ADICIONADAS (20 tipos)
+    "Cruz Fina",
+    "Cruz Grossa", 
+    "Circulo Duplo",
+    "Quadrado Vazado",
+    "X com Ponto",
+    "Alvo Precisão",
+    "Diamante Vazado",
+    "Estrela 6 Pontas",
+    "Triangulo Invertido",
+    "Cruz Suíça",
+    "Alvo Tático",
+    "Ponto Duplo",
+    "Círculo com Cruz",
+    "Quadrado com Cruz",
+    "X com Círculo",
+    "Hexágono",
+    "Octógono",
+    "Círculo Segmentado",
+    "Cruz Tática",
+    "Alvo Avançado"
 }
 
-local config = {
-    vidaX = 1479,
-    vidaY = 92,
-    coleteX = 1479,
-    coleteY = 134,
-    moneyX = 1551,
-    moneyY = 175,
-    vidaWidth = 50,
-    vidaHeight = 29,
-    coleteWidth = 50,
-    coleteHeight = 29,
-    moneySize = 63.0,
-    moneyBorderSize = 1.0,
-    borderRadius = 6.8,
-    vidaColor = {0.1, 0.3, 0.8, 1.0},
-    coleteColor = {0.6, 0.6, 0.6, 1.0},
-    moneyColor = {1.0, 1.0, 1.0, 1.0},
-    moneyBorderColor = {0.0, 0.0, 0.0, 1.0},
-    iconOffsetX = -35,
-    iconSize = 18.0,
-    fontColor = {1.0, 1.0, 1.0, 1.0},
-    hpFontSize = 13.0,
-    apFontSize = 13.0,
-    moneyFontSize = 13.0,
-    borderEnabled = true,
-    borderSize = 2.0,
-    borderColor = {1.0, 1.0, 1.0, 1.0},
-    miraEnabled = miraConfig.enabled,
-    miraX = miraConfig.x,
-    miraY = miraConfig.y,
-    miraSize = miraConfig.size,
-    miraWidth = miraConfig.width,
-    miraColor = {miraConfig.color[1], miraConfig.color[2], miraConfig.color[3], miraConfig.color[4]},
-    miraBorderEnabled = miraConfig.borderEnabled,
-    miraBorderSize = miraConfig.borderSize,
-    miraBorderColor = {miraConfig.borderColor[1], miraConfig.borderColor[2], miraConfig.borderColor[3], miraConfig.borderColor[4]},
-    miraTipo = miraConfig.tipo,
-    
-    timeId = 12,
-    weatherId = 0,
-    isWeatherActive = false,
-    isFakePcActive = false,
-    fovEnabled = false,
-    fovValue = 60,
-    
-    imageEnabled = false,
-    imageX = 100,
-    imageY = 100,
-    imageWidth = 200,
-    imageHeight = 200,
-    
-    buttonEnabled = true,
-    buttonX = 50,
-    buttonY = 50,
-    buttonSize = 60,
-    buttonColor = {0.0, 0.0, 0.0, 0.5},
-    buttonHoverColor = {0.0, 0.0, 0.0, 0.7},
-    buttonActiveColor = {0.0, 0.0, 0.0, 0.9}
+local estilosHUD = {
+    "Estilo Original",
+    "Barrinha Fina"
 }
 
-local vidaX = imgui.new.int(config.vidaX)
-local vidaY = imgui.new.int(config.vidaY)
-local vidaWidth = imgui.new.int(config.vidaWidth)
-local vidaHeight = imgui.new.int(config.vidaHeight)
-local coleteX = imgui.new.int(config.coleteX)
-local coleteY = imgui.new.int(config.coleteY)
-local coleteWidth = imgui.new.int(config.coleteWidth)
-local coleteHeight = imgui.new.int(config.coleteHeight)
-local moneyX = imgui.new.int(config.moneyX)
-local moneyY = imgui.new.int(config.moneyY)
-local moneySize = imgui.new.float(config.moneySize)
-local moneyBorderSize = imgui.new.float(config.moneyBorderSize)
-local borderRadius = imgui.new.float(config.borderRadius)
-local hpFontSize = imgui.new.float(config.hpFontSize)
-local apFontSize = imgui.new.float(config.apFontSize)
-local moneyFontSize = imgui.new.float(config.moneyFontSize)
-
-local borderEnabled = imgui.new.bool(config.borderEnabled)
-local borderSize = imgui.new.float(config.borderSize)
-local borderColor = imgui.new.float[4](config.borderColor[1], config.borderColor[2], config.borderColor[3], config.borderColor[4])
-
-local miraEnabled = imgui.new.bool(config.miraEnabled)
-local miraX = imgui.new.int(config.miraX)
-local miraY = imgui.new.int(config.miraY)
-local miraSize = imgui.new.float(config.miraSize)
-local miraWidth = imgui.new.float(config.miraWidth)
-local miraColor = imgui.new.float[4](config.miraColor[1], config.miraColor[2], config.miraColor[3], config.miraColor[4])
-local miraBorderEnabled = imgui.new.bool(config.miraBorderEnabled)
-local miraBorderSize = imgui.new.float(config.miraBorderSize)
-local miraBorderColor = imgui.new.float[4](config.miraBorderColor[1], config.miraBorderColor[2], config.miraBorderColor[3], config.miraBorderColor[4])
-local miraTipo = imgui.new.int(config.miraTipo)
-
-local vidaColor = imgui.new.float[4](config.vidaColor[1], config.vidaColor[2], config.vidaColor[3], config.vidaColor[4])
-local coleteColor = imgui.new.float[4](config.coleteColor[1], config.coleteColor[2], config.coleteColor[3], config.coleteColor[4])
-local moneyColor = imgui.new.float[4](config.moneyColor[1], config.moneyColor[2], config.moneyColor[3], config.moneyColor[4])
-local moneyBorderColor = imgui.new.float[4](config.moneyBorderColor[1], config.moneyBorderColor[2], config.moneyBorderColor[3], config.moneyBorderColor[4])
-local fontColor = imgui.new.float[4](config.fontColor[1], config.fontColor[2], config.fontColor[3], config.fontColor[4])
-
-local moveTogether = imgui.new.bool(true)
-local moveFontsTogether = imgui.new.bool(true)
-local moneyFont = nil
-local hpFont = nil
-local apFont = nil
-
-local timeId = imgui.new.int(config.timeId)
-local weatherId = imgui.new.int(config.weatherId)
-local isWeatherActive = imgui.new.bool(config.isWeatherActive)
-
-local isFakePcActive = imgui.new.bool(config.isFakePcActive)
-
-local fovEnabled = imgui.new.bool(config.fovEnabled)
-local fovValue = imgui.new.int(config.fovValue)
+local variaveis = {
+    estiloHUD = imgui.new.int(config.estiloHUD),
+    vidaX = imgui.new.int(config.vidaX),
+    vidaY = imgui.new.int(config.vidaY),
+    vidaLargura = imgui.new.int(config.vidaLargura),
+    vidaAltura = imgui.new.int(config.vidaAltura),
+    coleteX = imgui.new.int(config.coleteX),
+    coleteY = imgui.new.int(config.coleteY),
+    coleteLargura = imgui.new.int(config.coleteLargura),
+    coleteAltura = imgui.new.int(config.coleteAltura),
+    dinheiroX = imgui.new.int(config.dinheiroX),
+    dinheiroY = imgui.new.int(config.dinheiroY),
+    tamanhoDinheiro = imgui.new.float(config.tamanhoDinheiro),
+    tamanhoBordaDinheiro = imgui.new.float(config.tamanhoBordaDinheiro),
+    raioBorda = imgui.new.float(config.raioBorda),
+    tamanhoFonteHP = imgui.new.float(config.tamanhoFonteHP),
+    tamanhoFonteAP = imgui.new.float(config.tamanhoFonteAP),
+    tamanhoFonteDinheiro = imgui.new.float(config.tamanhoFonteDinheiro),
+    deslocamentoIconeX = imgui.new.int(config.deslocamentoIconeX),
+    deslocamentoIconeY = imgui.new.int(config.deslocamentoIconeY),
+    tamanhoIcone = imgui.new.float(config.tamanhoIcone),
+    fonteHPX = imgui.new.int(config.fonteHPX),
+    fonteHPY = imgui.new.int(config.fonteHPY),
+    fonteAPX = imgui.new.int(config.fonteAPX),
+    fonteAPY = imgui.new.int(config.fonteAPY),
+    bordaAtivada = imgui.new.bool(config.bordaAtivada),
+    tamanhoBorda = imgui.new.float(config.tamanhoBorda),
+    corBorda = imgui.new.float[4](config.corBorda[1], config.corBorda[2], config.corBorda[3], config.corBorda[4]),
+    miraAtivada = imgui.new.bool(config.miraAtivada),
+    miraX = imgui.new.int(config.miraX),
+    miraY = imgui.new.int(config.miraY),
+    miraTamanho = imgui.new.float(config.miraTamanho),
+    miraLargura = imgui.new.float(config.miraLargura),
+    corMira = imgui.new.float[4](config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+    miraBordaAtivada = imgui.new.bool(config.miraBordaAtivada),
+    miraTamanhoBorda = imgui.new.float(config.miraTamanhoBorda),
+    corBordaMira = imgui.new.float[4](config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+    miraTipo = imgui.new.int(config.miraTipo),
+    corVida = imgui.new.float[4](config.corVida[1], config.corVida[2], config.corVida[3], config.corVida[4]),
+    corColete = imgui.new.float[4](config.corColete[1], config.corColete[2], config.corColete[3], config.corColete[4]),
+    corDinheiro = imgui.new.float[4](config.corDinheiro[1], config.corDinheiro[2], config.corDinheiro[3], config.corDinheiro[4]),
+    corBordaDinheiro = imgui.new.float[4](config.corBordaDinheiro[1], config.corBordaDinheiro[2], config.corBordaDinheiro[3], config.corBordaDinheiro[4]),
+    corFonte = imgui.new.float[4](config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]),
+    moverJuntos = imgui.new.bool(true),
+    moverFontesJuntas = imgui.new.bool(true),
+    tempoId = imgui.new.int(config.tempoId),
+    climaId = imgui.new.int(config.climaId),
+    climaAtivo = imgui.new.bool(config.climaAtivo),
+    fakePcAtivo = imgui.new.bool(config.fakePcAtivo),
+    fovAtivado = imgui.new.bool(config.fovAtivado),
+    valorFov = imgui.new.int(config.valorFov),
+    somenteNumerosHPAP = imgui.new.bool(config.somenteNumerosHPAP),
+    emojisAtivados = imgui.new.bool(config.emojisAtivados)
+}
 
 local ffi = require("ffi")
 local gtasa = ffi.load("GTASA")
 ffi.cdef("void _Z12AND_OpenLinkPKc(const char* link);")
 
-local function openLink(link)
+local function abrirLink(link)
     gtasa._Z12AND_OpenLinkPKc(link)
 end
 
@@ -222,251 +189,1421 @@ local function rgba(r, g, b, a)
     return imgui.ColorConvertFloat4ToU32(imgui.ImVec4(r, g, b, a))
 end
 
-local function formatMoney(amount)
-    local formatted = tostring(amount)
+local function formatarDinheiro(valor)
+    local formatado = tostring(valor)
     local k
     while true do
-        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1.%2')
+        formatado, k = string.gsub(formatado, "^(-?%d+)(%d%d%d)", '%1.%2')
         if k == 0 then break end
     end
-    return formatted
+    return formatado
 end
 
-local function loadConfig()
-    local filePath = "/storage/emulated/0/.hudeditshellderwsw.json"
-    if doesFileExist(filePath) then
-        local file = io.open(filePath, "r")
-        if file then
-            local content = file:read("*a")
-            file:close()
-            local saved = json.decode(content)
-            if saved then
-                vidaX[0] = saved.vidaX or config.vidaX
-                vidaY[0] = saved.vidaY or config.vidaY
-                vidaWidth[0] = saved.vidaWidth or config.vidaWidth
-                vidaHeight[0] = saved.vidaHeight or config.vidaHeight
-                coleteX[0] = saved.coleteX or config.coleteX
-                coleteY[0] = saved.coleteY or config.coleteY
-                coleteWidth[0] = saved.coleteWidth or config.coleteWidth
-                coleteHeight[0] = saved.coleteHeight or config.coleteHeight
-                moneyX[0] = saved.moneyX or config.moneyX
-                moneyY[0] = saved.moneyY or config.moneyY
-                moneySize[0] = saved.moneySize or config.moneySize
-                moneyBorderSize[0] = saved.moneyBorderSize or config.moneyBorderSize
-                borderRadius[0] = saved.borderRadius or config.borderRadius
-                hpFontSize[0] = saved.hpFontSize or config.hpFontSize
-                apFontSize[0] = saved.apFontSize or config.apFontSize
-                moneyFontSize[0] = saved.moneyFontSize or config.moneyFontSize
-                
-                borderEnabled[0] = saved.borderEnabled ~= nil and saved.borderEnabled or config.borderEnabled
-                borderSize[0] = saved.borderSize or config.borderSize
-                
-                miraEnabled[0] = saved.miraEnabled ~= nil and saved.miraEnabled or config.miraEnabled
-                miraX[0] = saved.miraX or config.miraX
-                miraY[0] = saved.miraY or config.miraY
-                miraSize[0] = saved.miraSize or config.miraSize
-                miraWidth[0] = saved.miraWidth or config.miraWidth
-                miraBorderEnabled[0] = saved.miraBorderEnabled ~= nil and saved.miraBorderEnabled or config.miraBorderEnabled
-                miraBorderSize[0] = saved.miraBorderSize or config.miraBorderSize
-                miraTipo[0] = saved.miraTipo or config.miraTipo
+local function salvarConfig()
+    config.estiloHUD = variaveis.estiloHUD[0]
+    config.vidaX = variaveis.vidaX[0]
+    config.vidaY = variaveis.vidaY[0]
+    config.vidaLargura = variaveis.vidaLargura[0]
+    config.vidaAltura = variaveis.vidaAltura[0]
+    config.coleteX = variaveis.coleteX[0]
+    config.coleteY = variaveis.coleteY[0]
+    config.coleteLargura = variaveis.coleteLargura[0]
+    config.coleteAltura = variaveis.coleteAltura[0]
+    config.dinheiroX = variaveis.dinheiroX[0]
+    config.dinheiroY = variaveis.dinheiroY[0]
+    config.tamanhoDinheiro = variaveis.tamanhoDinheiro[0]
+    config.tamanhoBordaDinheiro = variaveis.tamanhoBordaDinheiro[0]
+    config.raioBorda = variaveis.raioBorda[0]
+    config.tamanhoFonteHP = variaveis.tamanhoFonteHP[0]
+    config.tamanhoFonteAP = variaveis.tamanhoFonteAP[0]
+    config.tamanhoFonteDinheiro = variaveis.tamanhoFonteDinheiro[0]
+    config.deslocamentoIconeX = variaveis.deslocamentoIconeX[0]
+    config.deslocamentoIconeY = variaveis.deslocamentoIconeY[0]
+    config.tamanhoIcone = variaveis.tamanhoIcone[0]
+    config.fonteHPX = variaveis.fonteHPX[0]
+    config.fonteHPY = variaveis.fonteHPY[0]
+    config.fonteAPX = variaveis.fonteAPX[0]
+    config.fonteAPY = variaveis.fonteAPY[0]
+    config.bordaAtivada = variaveis.bordaAtivada[0]
+    config.tamanhoBorda = variaveis.tamanhoBorda[0]
+    config.corBorda = {variaveis.corBorda[0], variaveis.corBorda[1], variaveis.corBorda[2], variaveis.corBorda[3]}
+    config.miraAtivada = variaveis.miraAtivada[0]
+    config.miraX = variaveis.miraX[0]
+    config.miraY = variaveis.miraY[0]
+    config.miraTamanho = variaveis.miraTamanho[0]
+    config.miraLargura = variaveis.miraLargura[0]
+    config.corMira = {variaveis.corMira[0], variaveis.corMira[1], variaveis.corMira[2], variaveis.corMira[3]}
+    config.miraBordaAtivada = variaveis.miraBordaAtivada[0]
+    config.miraTamanhoBorda = variaveis.miraTamanhoBorda[0]
+    config.corBordaMira = {variaveis.corBordaMira[0], variaveis.corBordaMira[1], variaveis.corBordaMira[2], variaveis.corBordaMira[3]}
+    config.miraTipo = variaveis.miraTipo[0]
+    config.corVida = {variaveis.corVida[0], variaveis.corVida[1], variaveis.corVida[2], variaveis.corVida[3]}
+    config.corColete = {variaveis.corColete[0], variaveis.corColete[1], variaveis.corColete[2], variaveis.corColete[3]}
+    config.corDinheiro = {variaveis.corDinheiro[0], variaveis.corDinheiro[1], variaveis.corDinheiro[2], variaveis.corDinheiro[3]}
+    config.corBordaDinheiro = {variaveis.corBordaDinheiro[0], variaveis.corBordaDinheiro[1], variaveis.corBordaDinheiro[2], variaveis.corBordaDinheiro[3]}
+    config.corFonte = {variaveis.corFonte[0], variaveis.corFonte[1], variaveis.corFonte[2], variaveis.corFonte[3]}
+    config.tempoId = variaveis.tempoId[0]
+    config.climaId = variaveis.climaId[0]
+    config.climaAtivo = variaveis.climaAtivo[0]
+    config.fakePcAtivo = variaveis.fakePcAtivo[0]
+    config.fovAtivado = variaveis.fovAtivado[0]
+    config.valorFov = variaveis.valorFov[0]
+    config.somenteNumerosHPAP = variaveis.somenteNumerosHPAP[0]
+    config.emojisAtivados = variaveis.emojisAtivados[0]
+    
+    local caminhoArquivo = "/storage/emulated/0/.hudeditshellderwsw.json"
+    local arquivo = io.open(caminhoArquivo, "w")
+    if arquivo then
+        arquivo:write(json.encode(config))
+        arquivo:close()
+    end
+end
 
-                timeId[0] = saved.timeId or config.timeId
-                weatherId[0] = saved.weatherId or config.weatherId
-                isWeatherActive[0] = saved.isWeatherActive ~= nil and saved.isWeatherActive or config.isWeatherActive
-                isFakePcActive[0] = saved.isFakePcActive ~= nil and saved.isFakePcActive or config.isFakePcActive
-                fovEnabled[0] = saved.fovEnabled ~= nil and saved.fovEnabled or config.fovEnabled
-                fovValue[0] = saved.fovValue or config.fovValue
-                
-                imageConfig.enabled[0] = saved.imageEnabled or config.imageEnabled
-                imageConfig.x[0] = saved.imageX or config.imageX
-                imageConfig.y[0] = saved.imageY or config.imageY
-                imageConfig.width[0] = saved.imageWidth or config.imageWidth
-                imageConfig.height[0] = saved.imageHeight or config.imageHeight
-                
-                buttonConfig.enabled[0] = saved.buttonEnabled ~= nil and saved.buttonEnabled or config.buttonEnabled
-                buttonConfig.x[0] = saved.buttonX or config.buttonX
-                buttonConfig.y[0] = saved.buttonY or config.buttonY
-                buttonConfig.size[0] = saved.buttonSize or config.buttonSize
-                
-                if saved.vidaColor then
-                    vidaColor[0] = saved.vidaColor[1] or config.vidaColor[1]
-                    vidaColor[1] = saved.vidaColor[2] or config.vidaColor[2]
-                    vidaColor[2] = saved.vidaColor[3] or config.vidaColor[3]
-                    vidaColor[3] = saved.vidaColor[4] or config.vidaColor[4]
+local function resetarConfiguracao()
+    for k, v in pairs(configPadrao) do
+        config[k] = v
+    end
+    
+    variaveis.estiloHUD[0] = configPadrao.estiloHUD
+    variaveis.vidaX[0] = configPadrao.vidaX
+    variaveis.vidaY[0] = configPadrao.vidaY
+    variaveis.vidaLargura[0] = configPadrao.vidaLargura
+    variaveis.vidaAltura[0] = configPadrao.vidaAltura
+    variaveis.coleteX[0] = configPadrao.coleteX
+    variaveis.coleteY[0] = configPadrao.coleteY
+    variaveis.coleteLargura[0] = configPadrao.coleteLargura
+    variaveis.coleteAltura[0] = configPadrao.coleteAltura
+    variaveis.dinheiroX[0] = configPadrao.dinheiroX
+    variaveis.dinheiroY[0] = configPadrao.dinheiroY
+    variaveis.tamanhoDinheiro[0] = configPadrao.tamanhoDinheiro
+    variaveis.tamanhoBordaDinheiro[0] = configPadrao.tamanhoBordaDinheiro
+    variaveis.raioBorda[0] = configPadrao.raioBorda
+    variaveis.tamanhoFonteHP[0] = configPadrao.tamanhoFonteHP
+    variaveis.tamanhoFonteAP[0] = configPadrao.tamanhoFonteAP
+    variaveis.tamanhoFonteDinheiro[0] = configPadrao.tamanhoFonteDinheiro
+    variaveis.deslocamentoIconeX[0] = configPadrao.deslocamentoIconeX
+    variaveis.deslocamentoIconeY[0] = configPadrao.deslocamentoIconeY
+    variaveis.tamanhoIcone[0] = configPadrao.tamanhoIcone
+    variaveis.fonteHPX[0] = configPadrao.fonteHPX
+    variaveis.fonteHPY[0] = configPadrao.fonteHPY
+    variaveis.fonteAPX[0] = configPadrao.fonteAPX
+    variaveis.fonteAPY[0] = configPadrao.fonteAPY
+    variaveis.bordaAtivada[0] = configPadrao.bordaAtivada
+    variaveis.tamanhoBorda[0] = configPadrao.tamanhoBorda
+    variaveis.corBorda[0] = configPadrao.corBorda[1]
+    variaveis.corBorda[1] = configPadrao.corBorda[2]
+    variaveis.corBorda[2] = configPadrao.corBorda[3]
+    variaveis.corBorda[3] = configPadrao.corBorda[4]
+    variaveis.miraAtivada[0] = configPadrao.miraAtivada
+    variaveis.miraX[0] = configPadrao.miraX
+    variaveis.miraY[0] = configPadrao.miraY
+    variaveis.miraTamanho[0] = configPadrao.miraTamanho
+    variaveis.miraLargura[0] = configPadrao.miraLargura
+    variaveis.corMira[0] = configPadrao.corMira[1]
+    variaveis.corMira[1] = configPadrao.corMira[2]
+    variaveis.corMira[2] = configPadrao.corMira[3]
+    variaveis.corMira[3] = configPadrao.corMira[4]
+    variaveis.miraBordaAtivada[0] = configPadrao.miraBordaAtivada
+    variaveis.miraTamanhoBorda[0] = configPadrao.miraTamanhoBorda
+    variaveis.corBordaMira[0] = configPadrao.corBordaMira[1]
+    variaveis.corBordaMira[1] = configPadrao.corBordaMira[2]
+    variaveis.corBordaMira[2] = configPadrao.corBordaMira[3]
+    variaveis.corBordaMira[3] = configPadrao.corBordaMira[4]
+    variaveis.miraTipo[0] = configPadrao.miraTipo
+    variaveis.corVida[0] = configPadrao.corVida[1]
+    variaveis.corVida[1] = configPadrao.corVida[2]
+    variaveis.corVida[2] = configPadrao.corVida[3]
+    variaveis.corVida[3] = configPadrao.corVida[4]
+    variaveis.corColete[0] = configPadrao.corColete[1]
+    variaveis.corColete[1] = configPadrao.corColete[2]
+    variaveis.corColete[2] = configPadrao.corColete[3]
+    variaveis.corColete[3] = configPadrao.corColete[4]
+    variaveis.corDinheiro[0] = configPadrao.corDinheiro[1]
+    variaveis.corDinheiro[1] = configPadrao.corDinheiro[2]
+    variaveis.corDinheiro[2] = configPadrao.corDinheiro[3]
+    variaveis.corDinheiro[3] = configPadrao.corDinheiro[4]
+    variaveis.corBordaDinheiro[0] = configPadrao.corBordaDinheiro[1]
+    variaveis.corBordaDinheiro[1] = configPadrao.corBordaDinheiro[2]
+    variaveis.corBordaDinheiro[2] = configPadrao.corBordaDinheiro[3]
+    variaveis.corBordaDinheiro[3] = configPadrao.corBordaDinheiro[4]
+    variaveis.corFonte[0] = configPadrao.corFonte[1]
+    variaveis.corFonte[1] = configPadrao.corFonte[2]
+    variaveis.corFonte[2] = configPadrao.corFonte[3]
+    variaveis.corFonte[3] = configPadrao.corFonte[4]
+    variaveis.tempoId[0] = configPadrao.tempoId
+    variaveis.climaId[0] = configPadrao.climaId
+    variaveis.climaAtivo[0] = configPadrao.climaAtivo
+    variaveis.fakePcAtivo[0] = configPadrao.fakePcAtivo
+    variaveis.fovAtivado[0] = configPadrao.fovAtivado
+    variaveis.valorFov[0] = configPadrao.valorFov
+    variaveis.somenteNumerosHPAP[0] = configPadrao.somenteNumerosHPAP
+    variaveis.emojisAtivados[0] = configPadrao.emojisAtivados
+    
+    salvarConfig()
+    sampAddChatMessage("{FFFFFF}[HUD EDIT] {FF0000}Configuracoes resetadas!", -1)
+end
+
+local function carregarConfig()
+    local caminhoArquivo = "/storage/emulated/0/.hudeditshellderwsw.json"
+    if doesFileExist(caminhoArquivo) then
+        local arquivo = io.open(caminhoArquivo, "r")
+        if arquivo then
+            local conteudo = arquivo:read("*a")
+            arquivo:close()
+            local salvo = json.decode(conteudo)
+            if salvo then
+                for k, v in pairs(configPadrao) do
+                    config[k] = salvo[k] or v
                 end
                 
-                if saved.coleteColor then
-                    coleteColor[0] = saved.coleteColor[1] or config.coleteColor[1]
-                    coleteColor[1] = saved.coleteColor[2] or config.coleteColor[2]
-                    coleteColor[2] = saved.coleteColor[3] or config.coleteColor[3]
-                    coleteColor[3] = saved.coleteColor[4] or config.coleteColor[4]
+                variaveis.estiloHUD[0] = salvo.estiloHUD or configPadrao.estiloHUD
+                variaveis.vidaX[0] = salvo.vidaX or configPadrao.vidaX
+                variaveis.vidaY[0] = salvo.vidaY or configPadrao.vidaY
+                variaveis.vidaLargura[0] = salvo.vidaLargura or configPadrao.vidaLargura
+                variaveis.vidaAltura[0] = salvo.vidaAltura or configPadrao.vidaAltura
+                variaveis.coleteX[0] = salvo.coleteX or configPadrao.coleteX
+                variaveis.coleteY[0] = salvo.coleteY or configPadrao.coleteY
+                variaveis.coleteLargura[0] = salvo.coleteLargura or configPadrao.coleteLargura
+                variaveis.coleteAltura[0] = salvo.coleteAltura or configPadrao.coleteAltura
+                variaveis.dinheiroX[0] = salvo.dinheiroX or configPadrao.dinheiroX
+                variaveis.dinheiroY[0] = salvo.dinheiroY or configPadrao.dinheiroY
+                variaveis.tamanhoDinheiro[0] = salvo.tamanhoDinheiro or configPadrao.tamanhoDinheiro
+                variaveis.tamanhoBordaDinheiro[0] = salvo.tamanhoBordaDinheiro or configPadrao.tamanhoBordaDinheiro
+                variaveis.raioBorda[0] = salvo.raioBorda or configPadrao.raioBorda
+                variaveis.tamanhoFonteHP[0] = salvo.tamanhoFonteHP or configPadrao.tamanhoFonteHP
+                variaveis.tamanhoFonteAP[0] = salvo.tamanhoFonteAP or configPadrao.tamanhoFonteAP
+                variaveis.tamanhoFonteDinheiro[0] = salvo.tamanhoFonteDinheiro or configPadrao.tamanhoFonteDinheiro
+                variaveis.deslocamentoIconeX[0] = salvo.deslocamentoIconeX or configPadrao.deslocamentoIconeX
+                variaveis.deslocamentoIconeY[0] = salvo.deslocamentoIconeY or configPadrao.deslocamentoIconeY
+                variaveis.tamanhoIcone[0] = salvo.tamanhoIcone or configPadrao.tamanhoIcone
+                variaveis.fonteHPX[0] = salvo.fonteHPX or configPadrao.fonteHPX
+                variaveis.fonteHPY[0] = salvo.fonteHPY or configPadrao.fonteHPY
+                variaveis.fonteAPX[0] = salvo.fonteAPX or configPadrao.fonteAPX
+                variaveis.fonteAPY[0] = salvo.fonteAPY or configPadrao.fonteAPY
+                variaveis.bordaAtivada[0] = salvo.bordaAtivada ~= nil and salvo.bordaAtivada or configPadrao.bordaAtivada
+                variaveis.tamanhoBorda[0] = salvo.tamanhoBorda or configPadrao.tamanhoBorda
+                variaveis.miraAtivada[0] = salvo.miraAtivada ~= nil and salvo.miraAtivada or configPadrao.miraAtivada
+                variaveis.miraX[0] = salvo.miraX or configPadrao.miraX
+                variaveis.miraY[0] = salvo.miraY or configPadrao.miraY
+                variaveis.miraTamanho[0] = salvo.miraTamanho or configPadrao.miraTamanho
+                variaveis.miraLargura[0] = salvo.miraLargura or configPadrao.miraLargura
+                variaveis.miraBordaAtivada[0] = salvo.miraBordaAtivada ~= nil and salvo.miraBordaAtivada or configPadrao.miraBordaAtivada
+                variaveis.miraTamanhoBorda[0] = salvo.miraTamanhoBorda or configPadrao.miraTamanhoBorda
+                variaveis.miraTipo[0] = salvo.miraTipo or configPadrao.miraTipo
+                variaveis.tempoId[0] = salvo.tempoId or configPadrao.tempoId
+                variaveis.climaId[0] = salvo.climaId or configPadrao.climaId
+                variaveis.climaAtivo[0] = salvo.climaAtivo ~= nil and salvo.climaAtivo or configPadrao.climaAtivo
+                variaveis.fakePcAtivo[0] = salvo.fakePcAtivo ~= nil and salvo.fakePcAtivo or configPadrao.fakePcAtivo
+                variaveis.fovAtivado[0] = salvo.fovAtivado ~= nil and salvo.fovAtivado or configPadrao.fovAtivado
+                variaveis.valorFov[0] = salvo.valorFov or configPadrao.valorFov
+                variaveis.somenteNumerosHPAP[0] = salvo.somenteNumerosHPAP ~= nil and salvo.somenteNumerosHPAP or configPadrao.somenteNumerosHPAP
+                variaveis.emojisAtivados[0] = salvo.emojisAtivados ~= nil and salvo.emojisAtivados or configPadrao.emojisAtivados
+                
+                if salvo.corVida then
+                    variaveis.corVida[0] = salvo.corVida[1] or configPadrao.corVida[1]
+                    variaveis.corVida[1] = salvo.corVida[2] or configPadrao.corVida[2]
+                    variaveis.corVida[2] = salvo.corVida[3] or configPadrao.corVida[3]
+                    variaveis.corVida[3] = salvo.corVida[4] or configPadrao.corVida[4]
                 end
                 
-                if saved.moneyColor then
-                    moneyColor[0] = saved.moneyColor[1] or config.moneyColor[1]
-                    moneyColor[1] = saved.moneyColor[2] or config.moneyColor[2]
-                    moneyColor[2] = saved.moneyColor[3] or config.moneyColor[3]
-                    moneyColor[3] = saved.moneyColor[4] or config.moneyColor[4]
+                if salvo.corColete then
+                    variaveis.corColete[0] = salvo.corColete[1] or configPadrao.corColete[1]
+                    variaveis.corColete[1] = salvo.corColete[2] or configPadrao.corColete[2]
+                    variaveis.corColete[2] = salvo.corColete[3] or configPadrao.corColete[3]
+                    variaveis.corColete[3] = salvo.corColete[4] or configPadrao.corColete[4]
                 end
                 
-                if saved.moneyBorderColor then
-                    moneyBorderColor[0] = saved.moneyBorderColor[1] or config.moneyBorderColor[1]
-                    moneyBorderColor[1] = saved.moneyBorderColor[2] or config.moneyBorderColor[2]
-                    moneyBorderColor[2] = saved.moneyBorderColor[3] or config.moneyBorderColor[3]
-                    moneyBorderColor[3] = saved.moneyBorderColor[4] or config.moneyBorderColor[4]
+                if salvo.corDinheiro then
+                    variaveis.corDinheiro[0] = salvo.corDinheiro[1] or configPadrao.corDinheiro[1]
+                    variaveis.corDinheiro[1] = salvo.corDinheiro[2] or configPadrao.corDinheiro[2]
+                    variaveis.corDinheiro[2] = salvo.corDinheiro[3] or configPadrao.corDinheiro[3]
+                    variaveis.corDinheiro[3] = salvo.corDinheiro[4] or configPadrao.corDinheiro[4]
                 end
                 
-                if saved.fontColor then
-                    fontColor[0] = saved.fontColor[1] or config.fontColor[1]
-                    fontColor[1] = saved.fontColor[2] or config.fontColor[2]
-                    fontColor[2] = saved.fontColor[3] or config.fontColor[3]
-                    fontColor[3] = saved.fontColor[4] or config.fontColor[4]
+                if salvo.corBordaDinheiro then
+                    variaveis.corBordaDinheiro[0] = salvo.corBordaDinheiro[1] or configPadrao.corBordaDinheiro[1]
+                    variaveis.corBordaDinheiro[1] = salvo.corBordaDinheiro[2] or configPadrao.corBordaDinheiro[2]
+                    variaveis.corBordaDinheiro[2] = salvo.corBordaDinheiro[3] or configPadrao.corBordaDinheiro[3]
+                    variaveis.corBordaDinheiro[3] = salvo.corBordaDinheiro[4] or configPadrao.corBordaDinheiro[4]
                 end
                 
-                if saved.borderColor then
-                    borderColor[0] = saved.borderColor[1] or config.borderColor[1]
-                    borderColor[1] = saved.borderColor[2] or config.borderColor[2]
-                    borderColor[2] = saved.borderColor[3] or config.borderColor[3]
-                    borderColor[3] = saved.borderColor[4] or config.borderColor[4]
+                if salvo.corFonte then
+                    variaveis.corFonte[0] = salvo.corFonte[1] or configPadrao.corFonte[1]
+                    variaveis.corFonte[1] = salvo.corFonte[2] or configPadrao.corFonte[2]
+                    variaveis.corFonte[2] = salvo.corFonte[3] or configPadrao.corFonte[3]
+                    variaveis.corFonte[3] = salvo.corFonte[4] or configPadrao.corFonte[4]
                 end
                 
-                if saved.miraColor then
-                    miraColor[0] = saved.miraColor[1] or config.miraColor[1]
-                    miraColor[1] = saved.miraColor[2] or config.miraColor[2]
-                    miraColor[2] = saved.miraColor[3] or config.miraColor[3]
-                    miraColor[3] = saved.miraColor[4] or config.miraColor[4]
+                if salvo.corBorda then
+                    variaveis.corBorda[0] = salvo.corBorda[1] or configPadrao.corBorda[1]
+                    variaveis.corBorda[1] = salvo.corBorda[2] or configPadrao.corBorda[2]
+                    variaveis.corBorda[2] = salvo.corBorda[3] or configPadrao.corBorda[3]
+                    variaveis.corBorda[3] = salvo.corBorda[4] or configPadrao.corBorda[4]
                 end
                 
-                if saved.miraBorderColor then
-                    miraBorderColor[0] = saved.miraBorderColor[1] or config.miraBorderColor[1]
-                    miraBorderColor[1] = saved.miraBorderColor[2] or config.miraBorderColor[2]
-                    miraBorderColor[2] = saved.miraBorderColor[3] or config.miraBorderColor[3]
-                    miraBorderColor[3] = saved.miraBorderColor[4] or config.miraBorderColor[4]
+                if salvo.corMira then
+                    variaveis.corMira[0] = salvo.corMira[1] or configPadrao.corMira[1]
+                    variaveis.corMira[1] = salvo.corMira[2] or configPadrao.corMira[2]
+                    variaveis.corMira[2] = salvo.corMira[3] or configPadrao.corMira[3]
+                    variaveis.corMira[3] = salvo.corMira[4] or configPadrao.corMira[4]
                 end
                 
-                if saved.buttonColor then
-                    buttonConfig.color[0] = saved.buttonColor[1] or config.buttonColor[1]
-                    buttonConfig.color[1] = saved.buttonColor[2] or config.buttonColor[2]
-                    buttonConfig.color[2] = saved.buttonColor[3] or config.buttonColor[3]
-                    buttonConfig.color[3] = saved.buttonColor[4] or config.buttonColor[4]
-                end
-                
-                if saved.buttonHoverColor then
-                    buttonConfig.hoverColor[0] = saved.buttonHoverColor[1] or config.buttonHoverColor[1]
-                    buttonConfig.hoverColor[1] = saved.buttonHoverColor[2] or config.buttonHoverColor[2]
-                    buttonConfig.hoverColor[2] = saved.buttonHoverColor[3] or config.buttonHoverColor[3]
-                    buttonConfig.hoverColor[3] = saved.buttonHoverColor[4] or config.buttonHoverColor[4]
-                end
-                
-                if saved.buttonActiveColor then
-                    buttonConfig.activeColor[0] = saved.buttonActiveColor[1] or config.buttonActiveColor[1]
-                    buttonConfig.activeColor[1] = saved.buttonActiveColor[2] or config.buttonActiveColor[2]
-                    buttonConfig.activeColor[2] = saved.buttonActiveColor[3] or config.buttonActiveColor[3]
-                    buttonConfig.activeColor[3] = saved.buttonActiveColor[4] or config.buttonActiveColor[4]
-                end
-                
-                for key, value in pairs(saved) do
-                    if key ~= "borderEnabled" and key ~= "miraEnabled" and key ~= "miraBorderEnabled" and key ~= "isWeatherActive" and key ~= "isFakePcActive" and key ~= "fovEnabled" and key ~= "imageEnabled" and key ~= "buttonEnabled" then
-                        config[key] = value
-                    end
+                if salvo.corBordaMira then
+                    variaveis.corBordaMira[0] = salvo.corBordaMira[1] or configPadrao.corBordaMira[1]
+                    variaveis.corBordaMira[1] = salvo.corBordaMira[2] or configPadrao.corBordaMira[2]
+                    variaveis.corBordaMira[2] = salvo.corBordaMira[3] or configPadrao.corBordaMira[3]
+                    variaveis.corBordaMira[3] = salvo.corBordaMira[4] or configPadrao.corBordaMira[4]
                 end
             end
         end
     end
 end
 
-local function saveConfig()
-    config.vidaX = vidaX[0]
-    config.vidaY = vidaY[0]
-    config.vidaWidth = vidaWidth[0]
-    config.vidaHeight = vidaHeight[0]
-    config.coleteX = coleteX[0]
-    config.coleteY = coleteY[0]
-    config.coleteWidth = coleteWidth[0]
-    config.coleteHeight = coleteHeight[0]
-    config.moneyX = moneyX[0]
-    config.moneyY = moneyY[0]
-    config.moneySize = moneySize[0]
-    config.moneyBorderSize = moneyBorderSize[0]
-    config.borderRadius = borderRadius[0]
-    config.hpFontSize = hpFontSize[0]
-    config.apFontSize = apFontSize[0]
-    config.moneyFontSize = moneyFontSize[0]
-    
-    config.borderEnabled = borderEnabled[0]
-    config.borderSize = borderSize[0]
-    config.borderColor = {borderColor[0], borderColor[1], borderColor[2], borderColor[3]}
-    
-    config.miraEnabled = miraEnabled[0]
-    config.miraX = miraX[0]
-    config.miraY = miraY[0]
-    config.miraSize = miraSize[0]
-    config.miraWidth = miraWidth[0]
-    config.miraColor = {miraColor[0], miraColor[1], miraColor[2], miraColor[3]}
-    config.miraBorderEnabled = miraBorderEnabled[0]
-    config.miraBorderSize = miraBorderSize[0]
-    config.miraBorderColor = {miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]}
-    config.miraTipo = miraTipo[0]
-    
-    config.vidaColor = {vidaColor[0], vidaColor[1], vidaColor[2], vidaColor[3]}
-    config.coleteColor = {coleteColor[0], coleteColor[1], coleteColor[2], coleteColor[3]}
-    config.moneyColor = {moneyColor[0], moneyColor[1], moneyColor[2], moneyColor[3]}
-    config.moneyBorderColor = {moneyBorderColor[0], moneyBorderColor[1], moneyBorderColor[2], moneyBorderColor[3]}
-    config.fontColor = {fontColor[0], fontColor[1], fontColor[2], fontColor[3]}
-
-    config.timeId = timeId[0]
-    config.weatherId = weatherId[0]
-    config.isWeatherActive = isWeatherActive[0]
-    config.isFakePcActive = isFakePcActive[0]
-    config.fovEnabled = fovEnabled[0]
-    config.fovValue = fovValue[0]
-    
-    config.imageEnabled = imageConfig.enabled[0]
-    config.imageX = imageConfig.x[0]
-    config.imageY = imageConfig.y[0]
-    config.imageWidth = imageConfig.width[0]
-    config.imageHeight = imageConfig.height[0]
-    
-    config.buttonEnabled = buttonConfig.enabled[0]
-    config.buttonX = buttonConfig.x[0]
-    config.buttonY = buttonConfig.y[0]
-    config.buttonSize = buttonConfig.size[0]
-    config.buttonColor = {buttonConfig.color[0], buttonConfig.color[1], buttonConfig.color[2], buttonConfig.color[3]}
-    config.buttonHoverColor = {buttonConfig.hoverColor[0], buttonConfig.hoverColor[1], buttonConfig.hoverColor[2], buttonConfig.hoverColor[3]}
-    config.buttonActiveColor = {buttonConfig.activeColor[0], buttonConfig.activeColor[1], buttonConfig.activeColor[2], buttonConfig.activeColor[3]}
-    
-    local filePath = "/storage/emulated/0/.hudeditshellderwsw.json"
-    local file = io.open(filePath, "w")
-    if file then
-        file:write(json.encode(config))
-        file:close()
+local function verificarMudancasESalvar()
+    local tempoAtual = os.clock()
+    if tempoAtual - estado.ultimoSalvamento > 2.0 then
+        if estado.modoEdicao[0] then
+            salvarConfig()
+            estado.ultimoSalvamento = tempoAtual
+        end
     end
 end
+
+local fonteDinheiro, fonteHP, fonteAP
 
 imgui.OnInitialize(function()
     local conf = imgui.ImFontConfig()
     conf.MergeMode = true
     conf.PixelSnapH = true
-    local iconRanges = imgui.new.ImWchar[3](faicons.min_range, faicons.max_range, 0)
+    local intervalosIcones = imgui.new.ImWchar[3](faicons.min_range, faicons.max_range, 0)
     imgui.GetIO().Fonts:AddFontFromMemoryCompressedBase85TTF(
-        faicons.get_font_data_base85("Solid"), 22, conf, iconRanges
+        faicons.get_font_data_base85("Solid"), 22, conf, intervalosIcones
     )
-    
-    moneyFont = imgui.GetIO().Fonts:AddFontDefault()
-    hpFont = imgui.GetIO().Fonts:AddFontDefault()
-    apFont = imgui.GetIO().Fonts:AddFontDefault()
+    fonteDinheiro = imgui.GetIO().Fonts:AddFontDefault()
+    fonteHP = imgui.GetIO().Fonts:AddFontDefault()
+    fonteAP = imgui.GetIO().Fonts:AddFontDefault()
     imgui.GetIO().Fonts:Build()
-    
-    loadImageTexture()
 end)
 
-local lastClickTime = 0
-local clickCooldown = 300
+local function desenharHUDOriginal(desenho, pos)
+    local vidaMaxima = 100
+    local coleteMaximo = 100
+    local percentualVida = math.min(estado.vida / vidaMaxima, 1.0)
+    local percentualColete = math.min(estado.colete / coleteMaximo, 1.0)
+    local larguraBarraVida = percentualVida * config.vidaLargura
+    local larguraBarraColete = percentualColete * config.coleteLargura
+    local fundoVida = imgui.ImVec2(pos.x + config.vidaX, pos.y + config.vidaY)
+    local fimVida = imgui.ImVec2(pos.x + config.vidaX + config.vidaLargura, pos.y + config.vidaY + config.vidaAltura)
+    local frenteVida = imgui.ImVec2(pos.x + config.vidaX + larguraBarraVida, pos.y + config.vidaY + config.vidaAltura)
+    desenho:AddRectFilled(fundoVida, fimVida, rgba(0.1, 0.1, 0.1, 0.8), config.raioBorda)
+    if larguraBarraVida > 0 then
+        desenho:AddRectFilled(fundoVida, frenteVida, rgba(config.corVida[1], config.corVida[2], config.corVida[3], config.corVida[4]), config.raioBorda)
+    end
+    if config.bordaAtivada and config.tamanhoBorda > 0 then
+        desenho:AddRect(fundoVida, fimVida, 
+                     rgba(config.corBorda[1], config.corBorda[2], config.corBorda[3], config.corBorda[4]), 
+                     config.raioBorda, 0, config.tamanhoBorda)
+    end
+    
+    imgui.SetWindowFontScale(config.tamanhoFonteHP / 13.0)
+    local textoVida = string.format("%d", math.floor(estado.vida))
+    if not config.somenteNumerosHPAP then
+        textoVida = textoVida .. " HP"
+    end
+    local posTextoVida = imgui.ImVec2(
+        pos.x + config.vidaX + config.fonteHPX, 
+        pos.y + config.vidaY + config.fonteHPY
+    )
+    desenho:AddText(posTextoVida, rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), textoVida)
+    imgui.SetWindowFontScale(1.0)
+    
+    if config.emojisAtivados then
+        imgui.SetWindowFontScale(config.tamanhoIcone / 22.0)
+        desenho:AddText(imgui.ImVec2(pos.x + config.vidaX + config.deslocamentoIconeX, pos.y + config.vidaY + 5 + config.deslocamentoIconeY), rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), faicons.HEART_PULSE)
+        imgui.SetWindowFontScale(1.0)
+    end
+    
+    local fundoColete = imgui.ImVec2(pos.x + config.coleteX, pos.y + config.coleteY)
+    local fimColete = imgui.ImVec2(pos.x + config.coleteX + config.coleteLargura, pos.y + config.coleteY + config.coleteAltura)
+    local frenteColete = imgui.ImVec2(pos.x + config.coleteX + larguraBarraColete, pos.y + config.coleteY + config.coleteAltura)
+    desenho:AddRectFilled(fundoColete, fimColete, rgba(0.1, 0.1, 0.1, 0.8), config.raioBorda)
+    if larguraBarraColete > 0 then
+        desenho:AddRectFilled(fundoColete, frenteColete, rgba(config.corColete[1], config.corColete[2], config.corColete[3], config.corColete[4]), config.raioBorda)
+    end
+    if config.bordaAtivada and config.tamanhoBorda > 0 then
+        desenho:AddRect(fundoColete, fimColete, 
+                     rgba(config.corBorda[1], config.corBorda[2], config.corBorda[3], config.corBorda[4]), 
+                     config.raioBorda, 0, config.tamanhoBorda)
+    end
+    
+    imgui.SetWindowFontScale(config.tamanhoFonteAP / 13.0)
+    local textoColete = string.format("%d", math.floor(estado.colete))
+    if not config.somenteNumerosHPAP then
+        textoColete = textoColete .. " AP"
+    end
+    local posTextoColete = imgui.ImVec2(
+        pos.x + config.coleteX + config.fonteAPX, 
+        pos.y + config.coleteY + config.fonteAPY
+    )
+    desenho:AddText(posTextoColete, rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), textoColete)
+    imgui.SetWindowFontScale(1.0)
+    
+    if config.emojisAtivados then
+        imgui.SetWindowFontScale(config.tamanhoIcone / 22.0)
+        desenho:AddText(imgui.ImVec2(pos.x + config.coleteX + config.deslocamentoIconeX, pos.y + config.coleteY + 5 + config.deslocamentoIconeY), rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), faicons.VEST)
+        imgui.SetWindowFontScale(1.0)
+    end
+    
+    imgui.SetWindowFontScale(config.tamanhoFonteDinheiro / 13.0)
+    local textoDinheiro = "$" .. formatarDinheiro(estado.dinheiro)
+    local posTexto = imgui.ImVec2(pos.x + config.dinheiroX, pos.y + config.dinheiroY)
+    for x = -config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro do
+        for y = -config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro do
+            if x ~= 0 or y ~= 0 then
+                desenho:AddText(imgui.ImVec2(posTexto.x + x, posTexto.y + y),
+                    rgba(config.corBordaDinheiro[1], config.corBordaDinheiro[2], config.corBordaDinheiro[3], config.corBordaDinheiro[4]),
+                    textoDinheiro)
+            end
+        end
+    end
+    desenho:AddText(posTexto, rgba(config.corDinheiro[1], config.corDinheiro[2], config.corDinheiro[3], config.corDinheiro[4]), textoDinheiro)
+    imgui.SetWindowFontScale(1.0)
+end
+
+local function desenharHUDBarrinhaFina(desenho, pos)
+    local vidaMaxima = 100
+    local coleteMaximo = 100
+    local percentualVida = math.min(estado.vida / vidaMaxima, 1.0)
+    local percentualColete = math.min(estado.colete / coleteMaximo, 1.0)
+    local larguraBarra = 150
+    local alturaBarra = 8
+    local espacamento = 15
+    local x = config.vidaX
+    local yVida = config.vidaY
+    local yColete = yVida + alturaBarra + espacamento
+    local fundoVida = imgui.ImVec2(pos.x + x, pos.y + yVida)
+    local fimVida = imgui.ImVec2(pos.x + x + larguraBarra, pos.y + yVida + alturaBarra)
+    local frenteVida = imgui.ImVec2(pos.x + x + (percentualVida * larguraBarra), pos.y + yVida + alturaBarra)
+    local fundoColete = imgui.ImVec2(pos.x + x, pos.y + yColete)
+    local fimColete = imgui.ImVec2(pos.x + x + larguraBarra, pos.y + yColete + alturaBarra)
+    local frenteColete = imgui.ImVec2(pos.x + x + (percentualColete * larguraBarra), pos.y + yColete + alturaBarra)
+    desenho:AddRectFilled(fundoVida, fimVida, rgba(0.1, 0.1, 0.1, 0.8), 2.0)
+    if percentualVida > 0 then
+        desenho:AddRectFilled(fundoVida, frenteVida, rgba(config.corVida[1], config.corVida[2], config.corVida[3], config.corVida[4]), 2.0)
+    end
+    desenho:AddRectFilled(fundoColete, fimColete, rgba(0.1, 0.1, 0.1, 0.8), 2.0)
+    if percentualColete > 0 then
+        desenho:AddRectFilled(fundoColete, frenteColete, rgba(config.corColete[1], config.corColete[2], config.corColete[3], config.corColete[4]), 2.0)
+    end
+    if config.bordaAtivada and config.tamanhoBorda > 0 then
+        desenho:AddRect(fundoVida, fimVida, 
+                     rgba(config.corBorda[1], config.corBorda[2], config.corBorda[3], config.corBorda[4]), 
+                     2.0, 0, config.tamanhoBorda)
+        desenho:AddRect(fundoColete, fimColete, 
+                     rgba(config.corBorda[1], config.corBorda[2], config.corBorda[3], config.corBorda[4]), 
+                     2.0, 0, config.tamanhoBorda)
+    end
+    
+    imgui.SetWindowFontScale(config.tamanhoFonteHP / 13.0)
+    local textoVida = string.format("%d", math.floor(estado.vida))
+    if not config.somenteNumerosHPAP then
+        textoVida = textoVida .. " HP"
+    end
+    local posTextoVida = imgui.ImVec2(
+        pos.x + x + larguraBarra + 10 + config.fonteHPX, 
+        pos.y + yVida + config.fonteHPY
+    )
+    desenho:AddText(posTextoVida, 
+                   rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), 
+                   textoVida)
+    
+    imgui.SetWindowFontScale(config.tamanhoFonteAP / 13.0)
+    local textoColete = string.format("%d", math.floor(estado.colete))
+    if not config.somenteNumerosHPAP then
+        textoColete = textoColete .. " AP"
+    end
+    local posTextoColete = imgui.ImVec2(
+        pos.x + x + larguraBarra + 10 + config.fonteAPX, 
+        pos.y + yColete + config.fonteAPY
+    )
+    desenho:AddText(posTextoColete, 
+                   rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), 
+                   textoColete)
+    imgui.SetWindowFontScale(1.0)
+    
+    if config.emojisAtivados then
+        imgui.SetWindowFontScale(config.tamanhoIcone / 22.0)
+        desenho:AddText(imgui.ImVec2(pos.x + x - 25 + config.deslocamentoIconeX, pos.y + yVida + config.deslocamentoIconeY), 
+                       rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), 
+                       faicons.HEART_PULSE)
+        desenho:AddText(imgui.ImVec2(pos.x + x - 25 + config.deslocamentoIconeX, pos.y + yColete + config.deslocamentoIconeY), 
+                       rgba(config.corFonte[1], config.corFonte[2], config.corFonte[3], config.corFonte[4]), 
+                       faicons.VEST)
+        imgui.SetWindowFontScale(1.0)
+    end
+    
+    imgui.SetWindowFontScale(config.tamanhoFonteDinheiro / 13.0)
+    local textoDinheiro = "$" .. formatarDinheiro(estado.dinheiro)
+    local posTexto = imgui.ImVec2(pos.x + config.dinheiroX, pos.y + config.dinheiroY)
+    for x = -config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro do
+        for y = -config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro, config.tamanhoBordaDinheiro do
+            if x ~= 0 or y ~= 0 then
+                desenho:AddText(imgui.ImVec2(posTexto.x + x, posTexto.y + y),
+                    rgba(config.corBordaDinheiro[1], config.corBordaDinheiro[2], config.corBordaDinheiro[3], config.corBordaDinheiro[4]),
+                    textoDinheiro)
+            end
+        end
+    end
+    desenho:AddText(posTexto, rgba(config.corDinheiro[1], config.corDinheiro[2], config.corDinheiro[3], config.corDinheiro[4]), textoDinheiro)
+    imgui.SetWindowFontScale(1.0)
+end
+
+local function desenharMira(desenho, pos)
+    if not config.miraAtivada then return end
+    
+    local larguraTela, alturaTela = getScreenResolution()
+    local centroX = pos.x + larguraTela / 2 + config.miraX
+    local centroY = pos.y + alturaTela / 2 + config.miraY
+    local metadeTamanho = config.miraTamanho / 2
+    
+    if config.miraBordaAtivada and config.miraTamanhoBorda > 0 then
+        local metadeTamanhoBorda = metadeTamanho + config.miraTamanhoBorda
+        
+        if config.miraTipo == 0 then
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        elseif config.miraTipo == 1 then
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        elseif config.miraTipo == 2 then
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        elseif config.miraTipo == 3 then
+            desenho:AddRect(
+                imgui.ImVec2(centroX - metadeTamanho - config.miraTamanhoBorda, centroY - metadeTamanho - config.miraTamanhoBorda),
+                imgui.ImVec2(centroX + metadeTamanho + config.miraTamanhoBorda, centroY + metadeTamanho + config.miraTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                0,
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        elseif config.miraTipo == 4 then
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        elseif config.miraTipo == 5 then
+            desenho:AddCircleFilled(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4])
+            )
+        elseif config.miraTipo == 6 then
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho/2 + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        elseif config.miraTipo == 7 then
+            local tamanhoDiamante = metadeTamanho + config.miraTamanhoBorda
+            desenho:AddQuad(
+                imgui.ImVec2(centroX, centroY - tamanhoDiamante),
+                imgui.ImVec2(centroX + tamanhoDiamante, centroY),
+                imgui.ImVec2(centroX, centroY + tamanhoDiamante),
+                imgui.ImVec2(centroX - tamanhoDiamante, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        elseif config.miraTipo == 8 then
+            local tamanhoEstrela = metadeTamanho + config.miraTamanhoBorda
+            for i = 0, 4 do
+                local angulo1 = i * 4 * math.pi / 5
+                local angulo2 = (i + 0.5) * 4 * math.pi / 5
+                desenho:AddLine(
+                    imgui.ImVec2(centroX + tamanhoEstrela * math.sin(angulo1), centroY - tamanhoEstrela * math.cos(angulo1)),
+                    imgui.ImVec2(centroX + tamanhoEstrela/2 * math.sin(angulo2), centroY - tamanhoEstrela/2 * math.cos(angulo2)),
+                    rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                    config.miraLargura + (config.miraTamanhoBorda * 2)
+                )
+            end
+        elseif config.miraTipo == 9 then
+            local tamanhoTriangulo = metadeTamanho + config.miraTamanhoBorda
+            desenho:AddTriangle(
+                imgui.ImVec2(centroX, centroY - tamanhoTriangulo),
+                imgui.ImVec2(centroX + tamanhoTriangulo, centroY + tamanhoTriangulo),
+                imgui.ImVec2(centroX - tamanhoTriangulo, centroY + tamanhoTriangulo),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                config.miraLargura + (config.miraTamanhoBorda * 2)
+            )
+        -- NOVAS MIRAS ADICIONADAS (20 tipos)
+        elseif config.miraTipo == 10 then
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                1.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                1.0
+            )
+        elseif config.miraTipo == 11 then
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                4.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                4.0
+            )
+        elseif config.miraTipo == 12 then
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho/2 + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+        elseif config.miraTipo == 13 then
+            desenho:AddRect(
+                imgui.ImVec2(centroX - metadeTamanho - config.miraTamanhoBorda, centroY - metadeTamanho - config.miraTamanhoBorda),
+                imgui.ImVec2(centroX + metadeTamanho + config.miraTamanhoBorda, centroY + metadeTamanho + config.miraTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                0,
+                2.0
+            )
+        elseif config.miraTipo == 14 then
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddCircleFilled(
+                imgui.ImVec2(centroX, centroY),
+                2.0,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4])
+            )
+        elseif config.miraTipo == 15 then
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda/2, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda/2, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda/2),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda/2),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+        elseif config.miraTipo == 16 then
+            local tamanhoDiamante = metadeTamanho + config.miraTamanhoBorda
+            desenho:AddQuad(
+                imgui.ImVec2(centroX, centroY - tamanhoDiamante),
+                imgui.ImVec2(centroX + tamanhoDiamante, centroY),
+                imgui.ImVec2(centroX, centroY + tamanhoDiamante),
+                imgui.ImVec2(centroX - tamanhoDiamante, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+        elseif config.miraTipo == 17 then
+            local tamanhoEstrela = metadeTamanho + config.miraTamanhoBorda
+            for i = 0, 5 do
+                local angulo1 = i * 2 * math.pi / 6
+                local angulo2 = (i + 0.5) * 2 * math.pi / 6
+                desenho:AddLine(
+                    imgui.ImVec2(centroX + tamanhoEstrela * math.sin(angulo1), centroY - tamanhoEstrela * math.cos(angulo1)),
+                    imgui.ImVec2(centroX + tamanhoEstrela/2 * math.sin(angulo2), centroY - tamanhoEstrela/2 * math.cos(angulo2)),
+                    rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                    2.0
+                )
+            end
+        elseif config.miraTipo == 18 then
+            local tamanhoTriangulo = metadeTamanho + config.miraTamanhoBorda
+            desenho:AddTriangle(
+                imgui.ImVec2(centroX, centroY + tamanhoTriangulo),
+                imgui.ImVec2(centroX + tamanhoTriangulo, centroY - tamanhoTriangulo),
+                imgui.ImVec2(centroX - tamanhoTriangulo, centroY - tamanhoTriangulo),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+        elseif config.miraTipo == 19 then
+            local tamanhoCruz = metadeTamanho + config.miraTamanhoBorda
+            desenho:AddLine(
+                imgui.ImVec2(centroX - tamanhoCruz, centroY),
+                imgui.ImVec2(centroX + tamanhoCruz, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - tamanhoCruz),
+                imgui.ImVec2(centroX, centroY + tamanhoCruz),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            local tamanhoInterno = tamanhoCruz / 3
+            desenho:AddLine(
+                imgui.ImVec2(centroX - tamanhoInterno, centroY - tamanhoInterno),
+                imgui.ImVec2(centroX + tamanhoInterno, centroY + tamanhoInterno),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                1.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX + tamanhoInterno, centroY - tamanhoInterno),
+                imgui.ImVec2(centroX - tamanhoInterno, centroY + tamanhoInterno),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                1.0
+            )
+        elseif config.miraTipo == 20 then
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda/2, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda/2, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda/2),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda/2),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            for i = 0, 3 do
+                local angulo = i * math.pi / 2
+                desenho:AddLine(
+                    imgui.ImVec2(centroX + (metadeTamanhoBorda/2) * math.cos(angulo), centroY + (metadeTamanhoBorda/2) * math.sin(angulo)),
+                    imgui.ImVec2(centroX + metadeTamanhoBorda * math.cos(angulo), centroY + metadeTamanhoBorda * math.sin(angulo)),
+                    rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                    1.0
+                )
+            end
+        elseif config.miraTipo == 21 then
+            desenho:AddCircleFilled(
+                imgui.ImVec2(centroX, centroY),
+                2.0 + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4])
+            )
+            desenho:AddCircleFilled(
+                imgui.ImVec2(centroX, centroY),
+                1.0,
+                rgba(0, 0, 0, 1.0)
+            )
+        elseif config.miraTipo == 22 then
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+        elseif config.miraTipo == 23 then
+            desenho:AddRect(
+                imgui.ImVec2(centroX - metadeTamanho - config.miraTamanhoBorda, centroY - metadeTamanho - config.miraTamanhoBorda),
+                imgui.ImVec2(centroX + metadeTamanho + config.miraTamanhoBorda, centroY + metadeTamanho + config.miraTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                0,
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+        elseif config.miraTipo == 24 then
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                metadeTamanho + config.miraTamanhoBorda,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX + metadeTamanhoBorda, centroY - metadeTamanhoBorda),
+                imgui.ImVec2(centroX - metadeTamanhoBorda, centroY + metadeTamanhoBorda),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+        elseif config.miraTipo == 25 then
+            local tamanhoHexagono = metadeTamanho + config.miraTamanhoBorda
+            for i = 0, 5 do
+                local angulo1 = i * 2 * math.pi / 6
+                local angulo2 = (i + 1) * 2 * math.pi / 6
+                desenho:AddLine(
+                    imgui.ImVec2(centroX + tamanhoHexagono * math.cos(angulo1), centroY + tamanhoHexagono * math.sin(angulo1)),
+                    imgui.ImVec2(centroX + tamanhoHexagono * math.cos(angulo2), centroY + tamanhoHexagono * math.sin(angulo2)),
+                    rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                    2.0
+                )
+            end
+        elseif config.miraTipo == 26 then
+            local tamanhoOctogono = metadeTamanho + config.miraTamanhoBorda
+            for i = 0, 7 do
+                local angulo1 = i * 2 * math.pi / 8
+                local angulo2 = (i + 1) * 2 * math.pi / 8
+                desenho:AddLine(
+                    imgui.ImVec2(centroX + tamanhoOctogono * math.cos(angulo1), centroY + tamanhoOctogono * math.sin(angulo1)),
+                    imgui.ImVec2(centroX + tamanhoOctogono * math.cos(angulo2), centroY + tamanhoOctogono * math.sin(angulo2)),
+                    rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                    2.0
+                )
+            end
+        elseif config.miraTipo == 27 then
+            local tamanhoSegmentado = metadeTamanho + config.miraTamanhoBorda
+            for i = 0, 7 do
+                local angulo = i * 2 * math.pi / 8
+                desenho:AddLine(
+                    imgui.ImVec2(centroX + (tamanhoSegmentado/2) * math.cos(angulo), centroY + (tamanhoSegmentado/2) * math.sin(angulo)),
+                    imgui.ImVec2(centroX + tamanhoSegmentado * math.cos(angulo), centroY + tamanhoSegmentado * math.sin(angulo)),
+                    rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                    1.5
+                )
+            end
+        elseif config.miraTipo == 28 then
+            local tamanhoTatica = metadeTamanho + config.miraTamanhoBorda
+            desenho:AddLine(
+                imgui.ImVec2(centroX - tamanhoTatica, centroY),
+                imgui.ImVec2(centroX - tamanhoTatica/3, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX + tamanhoTatica, centroY),
+                imgui.ImVec2(centroX + tamanhoTatica/3, centroY),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY - tamanhoTatica),
+                imgui.ImVec2(centroX, centroY - tamanhoTatica/3),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddLine(
+                imgui.ImVec2(centroX, centroY + tamanhoTatica),
+                imgui.ImVec2(centroX, centroY + tamanhoTatica/3),
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                2.0
+            )
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                tamanhoTatica/6,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+        elseif config.miraTipo == 29 then
+            local tamanhoAvancado = metadeTamanho + config.miraTamanhoBorda
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                tamanhoAvancado,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                tamanhoAvancado/2,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            desenho:AddCircle(
+                imgui.ImVec2(centroX, centroY),
+                tamanhoAvancado/4,
+                rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                0,
+                2.0
+            )
+            for i = 0, 3 do
+                local angulo = i * math.pi / 2
+                desenho:AddLine(
+                    imgui.ImVec2(centroX + (tamanhoAvancado/2) * math.cos(angulo), centroY + (tamanhoAvancado/2) * math.sin(angulo)),
+                    imgui.ImVec2(centroX + tamanhoAvancado * math.cos(angulo), centroY + tamanhoAvancado * math.sin(angulo)),
+                    rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
+                    1.5
+                )
+            end
+        end
+    end
+    
+    -- DESENHO PRINCIPAL DAS MIRAS
+    if config.miraTipo == 0 then
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY),
+            imgui.ImVec2(centroX + metadeTamanho, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho),
+            imgui.ImVec2(centroX, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+    elseif config.miraTipo == 1 then
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY),
+            imgui.ImVec2(centroX + metadeTamanho, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho),
+            imgui.ImVec2(centroX, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho/2, centroY - metadeTamanho/2),
+            imgui.ImVec2(centroX + metadeTamanho/2, centroY + metadeTamanho/2),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura/2
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX + metadeTamanho/2, centroY - metadeTamanho/2),
+            imgui.ImVec2(centroX - metadeTamanho/2, centroY + metadeTamanho/2),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura/2
+        )
+    elseif config.miraTipo == 2 then
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            config.miraLargura
+        )
+    elseif config.miraTipo == 3 then
+        desenho:AddRect(
+            imgui.ImVec2(centroX - metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX + metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            0,
+            config.miraLargura
+        )
+    elseif config.miraTipo == 4 then
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX + metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX + metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX - metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+    elseif config.miraTipo == 5 then
+        desenho:AddCircleFilled(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4])
+        )
+    elseif config.miraTipo == 6 then
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            config.miraLargura
+        )
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho/2,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            config.miraLargura
+        )
+    elseif config.miraTipo == 7 then
+        local tamanhoDiamante = metadeTamanho
+        desenho:AddQuad(
+            imgui.ImVec2(centroX, centroY - tamanhoDiamante),
+            imgui.ImVec2(centroX + tamanhoDiamante, centroY),
+            imgui.ImVec2(centroX, centroY + tamanhoDiamante),
+            imgui.ImVec2(centroX - tamanhoDiamante, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+    elseif config.miraTipo == 8 then
+        local tamanhoEstrela = metadeTamanho
+        for i = 0, 4 do
+            local angulo1 = i * 4 * math.pi / 5
+            local angulo2 = (i + 0.5) * 4 * math.pi / 5
+            desenho:AddLine(
+                imgui.ImVec2(centroX + tamanhoEstrela * math.sin(angulo1), centroY - tamanhoEstrela * math.cos(angulo1)),
+                imgui.ImVec2(centroX + tamanhoEstrela/2 * math.sin(angulo2), centroY - tamanhoEstrela/2 * math.cos(angulo2)),
+                rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+                config.miraLargura
+            )
+        end
+    elseif config.miraTipo == 9 then
+        local tamanhoTriangulo = metadeTamanho
+        desenho:AddTriangle(
+            imgui.ImVec2(centroX, centroY - tamanhoTriangulo),
+            imgui.ImVec2(centroX + tamanhoTriangulo, centroY + tamanhoTriangulo),
+            imgui.ImVec2(centroX - tamanhoTriangulo, centroY + tamanhoTriangulo),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            config.miraLargura
+        )
+    -- NOVAS MIRAS ADICIONADAS (20 tipos) - DESENHO PRINCIPAL
+    elseif config.miraTipo == 10 then
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY),
+            imgui.ImVec2(centroX + metadeTamanho, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            1.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho),
+            imgui.ImVec2(centroX, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            1.0
+        )
+    elseif config.miraTipo == 11 then
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY),
+            imgui.ImVec2(centroX + metadeTamanho, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            4.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho),
+            imgui.ImVec2(centroX, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            4.0
+        )
+    elseif config.miraTipo == 12 then
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho/2,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+    elseif config.miraTipo == 13 then
+        desenho:AddRect(
+            imgui.ImVec2(centroX - metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX + metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            0,
+            2.0
+        )
+    elseif config.miraTipo == 14 then
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX + metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX + metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX - metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddCircleFilled(
+            imgui.ImVec2(centroX, centroY),
+            2.0,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4])
+        )
+    elseif config.miraTipo == 15 then
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho/2, centroY),
+            imgui.ImVec2(centroX + metadeTamanho/2, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho/2),
+            imgui.ImVec2(centroX, centroY + metadeTamanho/2),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+    elseif config.miraTipo == 16 then
+        local tamanhoDiamante = metadeTamanho
+        desenho:AddQuad(
+            imgui.ImVec2(centroX, centroY - tamanhoDiamante),
+            imgui.ImVec2(centroX + tamanhoDiamante, centroY),
+            imgui.ImVec2(centroX, centroY + tamanhoDiamante),
+            imgui.ImVec2(centroX - tamanhoDiamante, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+    elseif config.miraTipo == 17 then
+        local tamanhoEstrela = metadeTamanho
+        for i = 0, 5 do
+            local angulo1 = i * 2 * math.pi / 6
+            local angulo2 = (i + 0.5) * 2 * math.pi / 6
+            desenho:AddLine(
+                imgui.ImVec2(centroX + tamanhoEstrela * math.sin(angulo1), centroY - tamanhoEstrela * math.cos(angulo1)),
+                imgui.ImVec2(centroX + tamanhoEstrela/2 * math.sin(angulo2), centroY - tamanhoEstrela/2 * math.cos(angulo2)),
+                rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+                2.0
+            )
+        end
+    elseif config.miraTipo == 18 then
+        local tamanhoTriangulo = metadeTamanho
+        desenho:AddTriangle(
+            imgui.ImVec2(centroX, centroY + tamanhoTriangulo),
+            imgui.ImVec2(centroX + tamanhoTriangulo, centroY - tamanhoTriangulo),
+            imgui.ImVec2(centroX - tamanhoTriangulo, centroY - tamanhoTriangulo),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+    elseif config.miraTipo == 19 then
+        local tamanhoCruz = metadeTamanho
+        desenho:AddLine(
+            imgui.ImVec2(centroX - tamanhoCruz, centroY),
+            imgui.ImVec2(centroX + tamanhoCruz, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - tamanhoCruz),
+            imgui.ImVec2(centroX, centroY + tamanhoCruz),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        local tamanhoInterno = tamanhoCruz / 3
+        desenho:AddLine(
+            imgui.ImVec2(centroX - tamanhoInterno, centroY - tamanhoInterno),
+            imgui.ImVec2(centroX + tamanhoInterno, centroY + tamanhoInterno),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            1.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX + tamanhoInterno, centroY - tamanhoInterno),
+            imgui.ImVec2(centroX - tamanhoInterno, centroY + tamanhoInterno),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            1.0
+        )
+    elseif config.miraTipo == 20 then
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho/2, centroY),
+            imgui.ImVec2(centroX + metadeTamanho/2, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho/2),
+            imgui.ImVec2(centroX, centroY + metadeTamanho/2),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        for i = 0, 3 do
+            local angulo = i * math.pi / 2
+            desenho:AddLine(
+                imgui.ImVec2(centroX + (metadeTamanho/2) * math.cos(angulo), centroY + (metadeTamanho/2) * math.sin(angulo)),
+                imgui.ImVec2(centroX + metadeTamanho * math.cos(angulo), centroY + metadeTamanho * math.sin(angulo)),
+                rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+                1.0
+            )
+        end
+    elseif config.miraTipo == 21 then
+        desenho:AddCircleFilled(
+            imgui.ImVec2(centroX, centroY),
+            2.0,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4])
+        )
+        desenho:AddCircleFilled(
+            imgui.ImVec2(centroX, centroY),
+            1.0,
+            rgba(0, 0, 0, 1.0)
+        )
+    elseif config.miraTipo == 22 then
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY),
+            imgui.ImVec2(centroX + metadeTamanho, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho),
+            imgui.ImVec2(centroX, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+    elseif config.miraTipo == 23 then
+        desenho:AddRect(
+            imgui.ImVec2(centroX - metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX + metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            0,
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY),
+            imgui.ImVec2(centroX + metadeTamanho, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - metadeTamanho),
+            imgui.ImVec2(centroX, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+    elseif config.miraTipo == 24 then
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            metadeTamanho,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX - metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX + metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX + metadeTamanho, centroY - metadeTamanho),
+            imgui.ImVec2(centroX - metadeTamanho, centroY + metadeTamanho),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+    elseif config.miraTipo == 25 then
+        local tamanhoHexagono = metadeTamanho
+        for i = 0, 5 do
+            local angulo1 = i * 2 * math.pi / 6
+            local angulo2 = (i + 1) * 2 * math.pi / 6
+            desenho:AddLine(
+                imgui.ImVec2(centroX + tamanhoHexagono * math.cos(angulo1), centroY + tamanhoHexagono * math.sin(angulo1)),
+                imgui.ImVec2(centroX + tamanhoHexagono * math.cos(angulo2), centroY + tamanhoHexagono * math.sin(angulo2)),
+                rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+                2.0
+            )
+        end
+    elseif config.miraTipo == 26 then
+        local tamanhoOctogono = metadeTamanho
+        for i = 0, 7 do
+            local angulo1 = i * 2 * math.pi / 8
+            local angulo2 = (i + 1) * 2 * math.pi / 8
+            desenho:AddLine(
+                imgui.ImVec2(centroX + tamanhoOctogono * math.cos(angulo1), centroY + tamanhoOctogono * math.sin(angulo1)),
+                imgui.ImVec2(centroX + tamanhoOctogono * math.cos(angulo2), centroY + tamanhoOctogono * math.sin(angulo2)),
+                rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+                2.0
+            )
+        end
+    elseif config.miraTipo == 27 then
+        local tamanhoSegmentado = metadeTamanho
+        for i = 0, 7 do
+            local angulo = i * 2 * math.pi / 8
+            desenho:AddLine(
+                imgui.ImVec2(centroX + (tamanhoSegmentado/2) * math.cos(angulo), centroY + (tamanhoSegmentado/2) * math.sin(angulo)),
+                imgui.ImVec2(centroX + tamanhoSegmentado * math.cos(angulo), centroY + tamanhoSegmentado * math.sin(angulo)),
+                rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+                1.5
+            )
+        end
+    elseif config.miraTipo == 28 then
+        local tamanhoTatica = metadeTamanho
+        desenho:AddLine(
+            imgui.ImVec2(centroX - tamanhoTatica, centroY),
+            imgui.ImVec2(centroX - tamanhoTatica/3, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX + tamanhoTatica, centroY),
+            imgui.ImVec2(centroX + tamanhoTatica/3, centroY),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY - tamanhoTatica),
+            imgui.ImVec2(centroX, centroY - tamanhoTatica/3),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddLine(
+            imgui.ImVec2(centroX, centroY + tamanhoTatica),
+            imgui.ImVec2(centroX, centroY + tamanhoTatica/3),
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            2.0
+        )
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            tamanhoTatica/6,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+    elseif config.miraTipo == 29 then
+        local tamanhoAvancado = metadeTamanho
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            tamanhoAvancado,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            tamanhoAvancado/2,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        desenho:AddCircle(
+            imgui.ImVec2(centroX, centroY),
+            tamanhoAvancado/4,
+            rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+            0,
+            2.0
+        )
+        for i = 0, 3 do
+            local angulo = i * math.pi / 2
+            desenho:AddLine(
+                imgui.ImVec2(centroX + (tamanhoAvancado/2) * math.cos(angulo), centroY + (tamanhoAvancado/2) * math.sin(angulo)),
+                imgui.ImVec2(centroX + tamanhoAvancado * math.cos(angulo), centroY + tamanhoAvancado * math.sin(angulo)),
+                rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
+                1.5
+            )
+        end
+    end
+end
 
 imgui.OnFrame(function() return true end, function()
-    local sw, sh = getScreenResolution()
+    local larguraTela, alturaTela = getScreenResolution()
     imgui.SetNextWindowPos(imgui.ImVec2(0, 0))
-    imgui.SetNextWindowSize(imgui.ImVec2(sw, sh))
+    imgui.SetNextWindowSize(imgui.ImVec2(larguraTela, alturaTela))
     imgui.Begin("HUD_ORIGINAL", nil,
         imgui.WindowFlags.NoDecoration +
         imgui.WindowFlags.NoMove +
@@ -474,429 +1611,105 @@ imgui.OnFrame(function() return true end, function()
         imgui.WindowFlags.NoInputs +
         imgui.WindowFlags.NoBringToFrontOnFocus
     )
-
-    local draw = imgui.GetWindowDrawList()
+    local desenho = imgui.GetWindowDrawList()
     local pos = imgui.GetWindowPos()
-    local mousePos = imgui.GetMousePos()
-    local io = imgui.GetIO()
 
-    if imageConfig.enabled[0] and imageConfig.currentTexture then
-        local imagePos = imgui.ImVec2(pos.x + imageConfig.x[0], pos.y + imageConfig.y[0])
-        local imageSize = imgui.ImVec2(imageConfig.width[0], imageConfig.height[0])
-        
-        draw:AddImage(imageConfig.currentTexture, imagePos, 
-                     imgui.ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y))
+    desenharMira(desenho, pos)
+
+    estado.opacidadeTexto[0] = estado.opacidadeTexto[0] + (estado.direcaoFade * 0.01)
+    if estado.opacidadeTexto[0] >= 1.0 then
+        estado.opacidadeTexto[0] = 1.0
+        estado.direcaoFade = -1
+        estado.indiceCor = estado.indiceCor % #listaCores + 1
+    elseif estado.opacidadeTexto[0] <= 0.0 then
+        estado.opacidadeTexto[0] = 0.0
+        estado.direcaoFade = 1
     end
 
-    if buttonConfig.enabled[0] then
-        local buttonPos = imgui.ImVec2(pos.x + buttonConfig.x[0], pos.y + buttonConfig.y[0])
-        local buttonRadius = buttonConfig.size[0] / 2
-        local buttonCenter = imgui.ImVec2(buttonPos.x + buttonRadius, buttonPos.y + buttonRadius)
-        
-        local mouseDistance = math.sqrt((mousePos.x - buttonCenter.x)^2 + (mousePos.y - buttonCenter.y)^2)
-        local isHovered = mouseDistance <= buttonRadius
-        
-        local currentTime = os.clock() * 1000
-        local canClick = (currentTime - lastClickTime) > clickCooldown
-        
-        local buttonColor = buttonConfig.color
-        if isHovered then
-            buttonColor = buttonConfig.hoverColor
-            if io.MouseClicked[0] and canClick then
-                buttonColor = buttonConfig.activeColor
-                toggleVoip()
-                lastClickTime = currentTime
-            end
-        end
-        
-        draw:AddCircleFilled(buttonCenter, buttonRadius, rgba(buttonColor[0], buttonColor[1], buttonColor[2], buttonColor[3]))
-    end
+    local corTexto = listaCores[estado.indiceCor]
+    local textoY = pos.y + alturaTela - 30
+    local textoX = pos.x + 50
 
-    if miraEnabled[0] then
-        local centerX = pos.x + sw / 2 + miraX[0]
-        local centerY = pos.y + sh / 2 + miraY[0]
-        local halfSize = miraSize[0] / 2
-        
-        if miraBorderEnabled[0] and miraBorderSize[0] > 0 then
-            local borderHalfSize = halfSize + miraBorderSize[0]
-            
-            if miraTipo[0] == 0 then
-                draw:AddLine(
-                    imgui.ImVec2(centerX - borderHalfSize, centerY),
-                    imgui.ImVec2(centerX + borderHalfSize, centerY),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-                draw:AddLine(
-                    imgui.ImVec2(centerX, centerY - borderHalfSize),
-                    imgui.ImVec2(centerX, centerY + borderHalfSize),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            elseif miraTipo[0] == 1 then
-                draw:AddLine(
-                    imgui.ImVec2(centerX - borderHalfSize, centerY),
-                    imgui.ImVec2(centerX + borderHalfSize, centerY),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-                draw:AddLine(
-                    imgui.ImVec2(centerX, centerY - borderHalfSize),
-                    imgui.ImVec2(centerX, centerY + borderHalfSize),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            elseif miraTipo[0] == 2 then
-                draw:AddCircle(
-                    imgui.ImVec2(centerX, centerY),
-                    halfSize + miraBorderSize[0],
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    0,
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            elseif miraTipo[0] == 3 then
-                draw:AddRect(
-                    imgui.ImVec2(centerX - halfSize - miraBorderSize[0], centerY - halfSize - miraBorderSize[0]),
-                    imgui.ImVec2(centerX + halfSize + miraBorderSize[0], centerY + halfSize + miraBorderSize[0]),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    0,
-                    0,
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            elseif miraTipo[0] == 4 then
-                draw:AddLine(
-                    imgui.ImVec2(centerX - borderHalfSize, centerY - borderHalfSize),
-                    imgui.ImVec2(centerX + borderHalfSize, centerY + borderHalfSize),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-                draw:AddLine(
-                    imgui.ImVec2(centerX + borderHalfSize, centerY - borderHalfSize),
-                    imgui.ImVec2(centerX - borderHalfSize, centerY + borderHalfSize),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            elseif miraTipo[0] == 5 then
-                draw:AddCircleFilled(
-                    imgui.ImVec2(centerX, centerY),
-                    halfSize + miraBorderSize[0],
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3])
-                )
-            elseif miraTipo[0] == 6 then
-                draw:AddCircle(
-                    imgui.ImVec2(centerX, centerY),
-                    halfSize + miraBorderSize[0],
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    0,
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-                draw:AddCircle(
-                    imgui.ImVec2(centerX, centerY),
-                    halfSize/2 + miraBorderSize[0],
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    0,
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            elseif miraTipo[0] == 7 then
-                local diamondSize = halfSize + miraBorderSize[0]
-                draw:AddQuad(
-                    imgui.ImVec2(centerX, centerY - diamondSize),
-                    imgui.ImVec2(centerX + diamondSize, centerY),
-                    imgui.ImVec2(centerX, centerY + diamondSize),
-                    imgui.ImVec2(centerX - diamondSize, centerY),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            elseif miraTipo[0] == 8 then
-                local starSize = halfSize + miraBorderSize[0]
-                for i = 0, 4 do
-                    local angle1 = i * 4 * math.pi / 5
-                    local angle2 = (i + 0.5) * 4 * math.pi / 5
-                    draw:AddLine(
-                        imgui.ImVec2(centerX + starSize * math.sin(angle1), centerY - starSize * math.cos(angle1)),
-                        imgui.ImVec2(centerX + starSize/2 * math.sin(angle2), centerY - starSize/2 * math.cos(angle2)),
-                        rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                        miraWidth[0] + (miraBorderSize[0] * 2)
-                    )
-                end
-            elseif miraTipo[0] == 9 then
-                local triangleSize = halfSize + miraBorderSize[0]
-                draw:AddTriangle(
-                    imgui.ImVec2(centerX, centerY - triangleSize),
-                    imgui.ImVec2(centerX + triangleSize, centerY + triangleSize),
-                    imgui.ImVec2(centerX - triangleSize, centerY + triangleSize),
-                    rgba(miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]),
-                    miraWidth[0] + (miraBorderSize[0] * 2)
-                )
-            end
-        end
-        
-        if miraTipo[0] == 0 then
-            draw:AddLine(
-                imgui.ImVec2(centerX - halfSize, centerY),
-                imgui.ImVec2(centerX + halfSize, centerY),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-            draw:AddLine(
-                imgui.ImVec2(centerX, centerY - halfSize),
-                imgui.ImVec2(centerX, centerY + halfSize),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-        elseif miraTipo[0] == 1 then
-            draw:AddLine(
-                imgui.ImVec2(centerX - halfSize, centerY),
-                imgui.ImVec2(centerX + halfSize, centerY),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-            draw:AddLine(
-                imgui.ImVec2(centerX, centerY - halfSize),
-                imgui.ImVec2(centerX, centerY + halfSize),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-            draw:AddLine(
-                imgui.ImVec2(centerX - halfSize/2, centerY - halfSize/2),
-                imgui.ImVec2(centerX + halfSize/2, centerY + halfSize/2),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]/2
-            )
-            draw:AddLine(
-                imgui.ImVec2(centerX + halfSize/2, centerY - halfSize/2),
-                imgui.ImVec2(centerX - halfSize/2, centerY + halfSize/2),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]/2
-            )
-        elseif miraTipo[0] == 2 then
-            draw:AddCircle(
-                imgui.ImVec2(centerX, centerY),
-                halfSize,
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                0,
-                miraWidth[0]
-            )
-        elseif miraTipo[0] == 3 then
-            draw:AddRect(
-                imgui.ImVec2(centerX - halfSize, centerY - halfSize),
-                imgui.ImVec2(centerX + halfSize, centerY + halfSize),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                0,
-                0,
-                miraWidth[0]
-            )
-        elseif miraTipo[0] == 4 then
-            draw:AddLine(
-                imgui.ImVec2(centerX - halfSize, centerY - halfSize),
-                imgui.ImVec2(centerX + halfSize, centerY + halfSize),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-            draw:AddLine(
-                imgui.ImVec2(centerX + halfSize, centerY - halfSize),
-                imgui.ImVec2(centerX - halfSize, centerY + halfSize),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-        elseif miraTipo[0] == 5 then
-            draw:AddCircleFilled(
-                imgui.ImVec2(centerX, centerY),
-                halfSize,
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3])
-            )
-        elseif miraTipo[0] == 6 then
-            draw:AddCircle(
-                imgui.ImVec2(centerX, centerY),
-                halfSize,
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                0,
-                miraWidth[0]
-            )
-            draw:AddCircle(
-                imgui.ImVec2(centerX, centerY),
-                halfSize/2,
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                0,
-                miraWidth[0]
-            )
-        elseif miraTipo[0] == 7 then
-            local diamondSize = halfSize
-            draw:AddQuad(
-                imgui.ImVec2(centerX, centerY - diamondSize),
-                imgui.ImVec2(centerX + diamondSize, centerY),
-                imgui.ImVec2(centerX, centerY + diamondSize),
-                imgui.ImVec2(centerX - diamondSize, centerY),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-        elseif miraTipo[0] == 8 then
-            local starSize = halfSize
-            for i = 0, 4 do
-                local angle1 = i * 4 * math.pi / 5
-                local angle2 = (i + 0.5) * 4 * math.pi / 5
-                draw:AddLine(
-                    imgui.ImVec2(centerX + starSize * math.sin(angle1), centerY - starSize * math.cos(angle1)),
-                    imgui.ImVec2(centerX + starSize/2 * math.sin(angle2), centerY - starSize/2 * math.cos(angle2)),
-                    rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                    miraWidth[0]
-                )
-            end
-        elseif miraTipo[0] == 9 then
-            local triangleSize = halfSize
-            draw:AddTriangle(
-                imgui.ImVec2(centerX, centerY - triangleSize),
-                imgui.ImVec2(centerX + triangleSize, centerY + triangleSize),
-                imgui.ImVec2(centerX - triangleSize, centerY + triangleSize),
-                rgba(miraColor[0], miraColor[1], miraColor[2], miraColor[3]),
-                miraWidth[0]
-            )
-        end
-    end
-
-    shellderTextOpacity[0] = shellderTextOpacity[0] + (shellderFadeDirection * 0.01)
-    if shellderTextOpacity[0] >= 1.0 then
-        shellderTextOpacity[0] = 1.0
-        shellderFadeDirection = -1
-        shellderColorIndex = shellderColorIndex % #shellderColorList + 1
-    elseif shellderTextOpacity[0] <= 0.0 then
-        shellderTextOpacity[0] = 0.0
-        shellderFadeDirection = 1
-    end
-
-    local shellderColor = shellderColorList[shellderColorIndex]
-    
-    local shellderY = pos.y + sh - 30
-    local shellderX = pos.x + 50
-
-    draw:AddText(imgui.ImVec2(shellderX, shellderY), 
-                 rgba(shellderColor[1], shellderColor[2], shellderColor[3], shellderTextOpacity[0]), 
+    desenho:AddText(imgui.ImVec2(textoX, textoY), 
+                 rgba(corTexto[1], corTexto[2], corTexto[3], estado.opacidadeTexto[0]), 
                  "by shellder")
 
-    if editMode[0] then
-        config.vidaX = vidaX[0]
-        config.vidaY = vidaY[0]
-        config.vidaWidth = vidaWidth[0]
-        config.vidaHeight = vidaHeight[0]
-        config.coleteX = coleteX[0]
-        config.coleteY = coleteY[0]
-        config.coleteWidth = coleteWidth[0]
-        config.coleteHeight = coleteHeight[0]
-        config.moneyX = moneyX[0]
-        config.moneyY = moneyY[0]
-        config.moneySize = moneySize[0]
-        config.moneyBorderSize = moneyBorderSize[0]
-        config.borderRadius = borderRadius[0]
-        config.hpFontSize = hpFontSize[0]
-        config.apFontSize = apFontSize[0]
-        config.moneyFontSize = moneyFontSize[0]
-        
-        config.borderEnabled = borderEnabled[0]
-        config.borderSize = borderSize[0]
-        config.borderColor = {borderColor[0], borderColor[1], borderColor[2], borderColor[3]}
-        
-        config.miraEnabled = miraEnabled[0]
-        config.miraX = miraX[0]
-        config.miraY = miraY[0]
-        config.miraSize = miraSize[0]
-        config.miraWidth = miraWidth[0]
-        config.miraColor = {miraColor[0], miraColor[1], miraColor[2], miraColor[3]}
-        config.miraBorderEnabled = miraBorderEnabled[0]
-        config.miraBorderSize = miraBorderSize[0]
-        config.miraBorderColor = {miraBorderColor[0], miraBorderColor[1], miraBorderColor[2], miraBorderColor[3]}
-        config.miraTipo = miraTipo[0]
-        
-        config.buttonEnabled = buttonConfig.enabled[0]
-        config.buttonX = buttonConfig.x[0]
-        config.buttonY = buttonConfig.y[0]
-        config.buttonSize = buttonConfig.size[0]
-        config.buttonColor = {buttonConfig.color[0], buttonConfig.color[1], buttonConfig.color[2], buttonConfig.color[3]}
-        config.buttonHoverColor = {buttonConfig.hoverColor[0], buttonConfig.hoverColor[1], buttonConfig.hoverColor[2], buttonConfig.hoverColor[3]}
-        config.buttonActiveColor = {buttonConfig.activeColor[0], buttonConfig.activeColor[1], buttonConfig.activeColor[2], buttonConfig.activeColor[3]}
-    end
-
-    local vidaMax = 100
-    local coleteMax = 100
-    
-    local vidaPercent = math.min(vida / vidaMax, 1.0)
-    local coletePercent = math.min(colete / coleteMax, 1.0)
-    
-    local vidaBarWidth = vidaPercent * config.vidaWidth
-    local coleteBarWidth = coletePercent * config.coleteWidth
-
-    local vidaBG = imgui.ImVec2(pos.x + config.vidaX, pos.y + config.vidaY)
-    local vidaEnd = imgui.ImVec2(pos.x + config.vidaX + config.vidaWidth, pos.y + config.vidaY + config.vidaHeight)
-    local vidaFG = imgui.ImVec2(pos.x + config.vidaX + vidaBarWidth, pos.y + config.vidaY + config.vidaHeight)
-    
-    draw:AddRectFilled(vidaBG, vidaEnd, rgba(0.1, 0.1, 0.1, 0.8), config.borderRadius)
-    if vidaBarWidth > 0 then
-        draw:AddRectFilled(vidaBG, vidaFG, rgba(config.vidaColor[1], config.vidaColor[2], config.vidaColor[3], config.vidaColor[4]), config.borderRadius)
-    end
-    
-    if borderEnabled[0] and borderSize[0] > 0 then
-        draw:AddRect(vidaBG, vidaEnd, 
-                     rgba(borderColor[0], borderColor[1], borderColor[2], borderColor[3]), 
-                     config.borderRadius, 0, borderSize[0])
-    end
-    
-    imgui.SetWindowFontScale(config.hpFontSize / 13.0)
-    draw:AddText(imgui.ImVec2(pos.x + config.vidaX + 10, pos.y + config.vidaY + 7), rgba(config.fontColor[1], config.fontColor[2], config.fontColor[3], config.fontColor[4]), string.format("%d HP", math.floor(vida)))
-    imgui.SetWindowFontScale(1.0)
-    
-    draw:AddText(imgui.ImVec2(pos.x + config.vidaX + config.iconOffsetX, pos.y + config.vidaY + 5), rgba(config.fontColor[1], config.fontColor[2], config.fontColor[3], config.fontColor[4]), faicons.HEART_PULSE)
-
-    local coleteBG = imgui.ImVec2(pos.x + config.coleteX, pos.y + config.coleteY)
-    local coleteEnd = imgui.ImVec2(pos.x + config.coleteX + config.coleteWidth, pos.y + config.coleteY + config.coleteHeight)
-    local coleteFG = imgui.ImVec2(pos.x + config.coleteX + coleteBarWidth, pos.y + config.coleteY + config.coleteHeight)
-    
-    draw:AddRectFilled(coleteBG, coleteEnd, rgba(0.1, 0.1, 0.1, 0.8), config.borderRadius)
-    if coleteBarWidth > 0 then
-        draw:AddRectFilled(coleteBG, coleteFG, rgba(config.coleteColor[1], config.coleteColor[2], config.coleteColor[3], config.coleteColor[4]), config.borderRadius)
-    end
-    
-    if borderEnabled[0] and borderSize[0] > 0 then
-        draw:AddRect(coleteBG, coleteEnd, 
-                     rgba(borderColor[0], borderColor[1], borderColor[2], borderColor[3]), 
-                     config.borderRadius, 0, borderSize[0])
-    end
-    
-    imgui.SetWindowFontScale(config.apFontSize / 13.0)
-    draw:AddText(imgui.ImVec2(pos.x + config.coleteX + 10, pos.y + config.coleteY + 7), rgba(config.fontColor[1], config.fontColor[2], config.fontColor[3], config.fontColor[4]), string.format("%d AP", math.floor(colete)))
-    imgui.SetWindowFontScale(1.0)
-    
-    draw:AddText(imgui.ImVec2(pos.x + config.coleteX + config.iconOffsetX, pos.y + config.coleteY + 5), rgba(config.fontColor[1], config.fontColor[2], config.fontColor[3], config.fontColor[4]), faicons.VEST)
-
-    imgui.SetWindowFontScale(config.moneyFontSize / 13.0)
-    
-    local moneyText = "$" .. formatMoney(dinheiro)
-    local textPos = imgui.ImVec2(pos.x + config.moneyX, pos.y + config.moneyY)
-    
-    for x = -config.moneyBorderSize, config.moneyBorderSize, config.moneyBorderSize do
-        for y = -config.moneyBorderSize, config.moneyBorderSize, config.moneyBorderSize do
-            if x ~= 0 or y ~= 0 then
-                draw:AddText(imgui.ImVec2(textPos.x + x, textPos.y + y),
-                    rgba(config.moneyBorderColor[1], config.moneyBorderColor[2], config.moneyBorderColor[3], config.moneyBorderColor[4]),
-                    moneyText)
+    if estado.modoEdicao[0] then
+        for k, v in pairs(variaveis) do
+            if k == "estiloHUD" then config.estiloHUD = v[0]
+            elseif k == "vidaX" then config.vidaX = v[0]
+            elseif k == "vidaY" then config.vidaY = v[0]
+            elseif k == "vidaLargura" then config.vidaLargura = v[0]
+            elseif k == "vidaAltura" then config.vidaAltura = v[0]
+            elseif k == "coleteX" then config.coleteX = v[0]
+            elseif k == "coleteY" then config.coleteY = v[0]
+            elseif k == "coleteLargura" then config.coleteLargura = v[0]
+            elseif k == "coleteAltura" then config.coleteAltura = v[0]
+            elseif k == "dinheiroX" then config.dinheiroX = v[0]
+            elseif k == "dinheiroY" then config.dinheiroY = v[0]
+            elseif k == "tamanhoDinheiro" then config.tamanhoDinheiro = v[0]
+            elseif k == "tamanhoBordaDinheiro" then config.tamanhoBordaDinheiro = v[0]
+            elseif k == "raioBorda" then config.raioBorda = v[0]
+            elseif k == "tamanhoFonteHP" then config.tamanhoFonteHP = v[0]
+            elseif k == "tamanhoFonteAP" then config.tamanhoFonteAP = v[0]
+            elseif k == "tamanhoFonteDinheiro" then config.tamanhoFonteDinheiro = v[0]
+            elseif k == "deslocamentoIconeX" then config.deslocamentoIconeX = v[0]
+            elseif k == "deslocamentoIconeY" then config.deslocamentoIconeY = v[0]
+            elseif k == "tamanhoIcone" then config.tamanhoIcone = v[0]
+            elseif k == "fonteHPX" then config.fonteHPX = v[0]
+            elseif k == "fonteHPY" then config.fonteHPY = v[0]
+            elseif k == "fonteAPX" then config.fonteAPX = v[0]
+            elseif k == "fonteAPY" then config.fonteAPY = v[0]
+            elseif k == "bordaAtivada" then config.bordaAtivada = v[0]
+            elseif k == "tamanhoBorda" then config.tamanhoBorda = v[0]
+            elseif k == "miraAtivada" then config.miraAtivada = v[0]
+            elseif k == "miraX" then config.miraX = v[0]
+            elseif k == "miraY" then config.miraY = v[0]
+            elseif k == "miraTamanho" then config.miraTamanho = v[0]
+            elseif k == "miraLargura" then config.miraLargura = v[0]
+            elseif k == "miraBordaAtivada" then config.miraBordaAtivada = v[0]
+            elseif k == "miraTamanhoBorda" then config.miraTamanhoBorda = v[0]
+            elseif k == "miraTipo" then config.miraTipo = v[0]
+            elseif k == "tempoId" then config.tempoId = v[0]
+            elseif k == "climaId" then config.climaId = v[0]
+            elseif k == "climaAtivo" then config.climaAtivo = v[0]
+            elseif k == "fakePcAtivo" then config.fakePcAtivo = v[0]
+            elseif k == "fovAtivado" then config.fovAtivado = v[0]
+            elseif k == "valorFov" then config.valorFov = v[0]
+            elseif k == "somenteNumerosHPAP" then config.somenteNumerosHPAP = v[0]
+            elseif k == "emojisAtivados" then config.emojisAtivados = v[0]
             end
         end
+        
+        config.corBorda = {variaveis.corBorda[0], variaveis.corBorda[1], variaveis.corBorda[2], variaveis.corBorda[3]}
+        config.corMira = {variaveis.corMira[0], variaveis.corMira[1], variaveis.corMira[2], variaveis.corMira[3]}
+        config.corBordaMira = {variaveis.corBordaMira[0], variaveis.corBordaMira[1], variaveis.corBordaMira[2], variaveis.corBordaMira[3]}
+        config.corVida = {variaveis.corVida[0], variaveis.corVida[1], variaveis.corVida[2], variaveis.corVida[3]}
+        config.corColete = {variaveis.corColete[0], variaveis.corColete[1], variaveis.corColete[2], variaveis.corColete[3]}
+        config.corDinheiro = {variaveis.corDinheiro[0], variaveis.corDinheiro[1], variaveis.corDinheiro[2], variaveis.corDinheiro[3]}
+        config.corBordaDinheiro = {variaveis.corBordaDinheiro[0], variaveis.corBordaDinheiro[1], variaveis.corBordaDinheiro[2], variaveis.corBordaDinheiro[3]}
+        config.corFonte = {variaveis.corFonte[0], variaveis.corFonte[1], variaveis.corFonte[2], variaveis.corFonte[3]}
+        
+        verificarMudancasESalvar()
     end
-    draw:AddText(textPos, rgba(config.moneyColor[1], config.moneyColor[2], config.moneyColor[3], config.moneyColor[4]), moneyText)
-    
-    imgui.SetWindowFontScale(1.0)
+
+    if config.estiloHUD == 0 then
+        desenharHUDOriginal(desenho, pos)
+    else
+        desenharHUDBarrinhaFina(desenho, pos)
+    end
     
     imgui.End()
 end)
 
-local function CenterText(text)
-    imgui.SetCursorPosX(imgui.GetWindowWidth() / 2 - imgui.CalcTextSize(text).x / 2)
-    imgui.Text(text)
+local function TextoCentralizado(texto)
+    imgui.SetCursorPosX(imgui.GetWindowWidth() / 2 - imgui.CalcTextSize(texto).x / 2)
+    imgui.Text(texto)
 end
 
-imgui.OnFrame(function() return editMode[0] end, function()
+imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
     imgui.SetNextWindowSize(imgui.ImVec2(600, 700), imgui.Cond.FirstUseEver)
-    
     imgui.SetNextWindowSizeConstraints(imgui.ImVec2(600, 700), imgui.ImVec2(600, 700))
-    
     imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.0, 0.0, 0.0, 0.8))
     imgui.PushStyleColor(imgui.Col.TitleBg, imgui.ImVec4(0.1, 0.1, 0.1, 0.9))
     imgui.PushStyleColor(imgui.Col.TitleBgActive, imgui.ImVec4(0.2, 0.2, 0.2, 0.9))
@@ -912,437 +1725,287 @@ imgui.OnFrame(function() return editMode[0] end, function()
     imgui.PushStyleColor(imgui.Col.SliderGrab, imgui.ImVec4(0.4, 0.4, 0.4, 1.0))
     imgui.PushStyleColor(imgui.Col.SliderGrabActive, imgui.ImVec4(0.5, 0.5, 0.5, 1.0))
     imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1.0, 1.0, 1.0, 1.0))
-    
     imgui.PushStyleColor(imgui.Col.Tab, imgui.ImVec4(0.5, 0.0, 0.0, 0.8))
     imgui.PushStyleColor(imgui.Col.TabHovered, imgui.ImVec4(0.8, 0.0, 0.0, 0.9))
     imgui.PushStyleColor(imgui.Col.TabActive, imgui.ImVec4(1.0, 0.0, 0.0, 1.0))
-    
-    local windowOpen = imgui.Begin("HUD ESTILO PC - by Shellder", editMode, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)
-
-    local draw = imgui.GetWindowDrawList()
-    local windowPos = imgui.GetWindowPos()
-    local windowSize = imgui.GetWindowSize()
-
-    shellderTextOpacity[0] = shellderTextOpacity[0] + (shellderFadeDirection * 0.01)
-    if shellderTextOpacity[0] >= 1.0 then
-        shellderTextOpacity[0] = 1.0
-        shellderFadeDirection = -1
-        shellderColorIndex = shellderColorIndex % #shellderColorList + 1
-    elseif shellderTextOpacity[0] <= 0.0 then
-        shellderTextOpacity[0] = 0.0
-        shellderFadeDirection = 1
+    local janelaAberta = imgui.Begin("HUD ESTILO PC - by Shellder", estado.modoEdicao, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)
+    local desenho = imgui.GetWindowDrawList()
+    local posJanela = imgui.GetWindowPos()
+    local tamanhoJanela = imgui.GetWindowSize()
+    estado.opacidadeTexto[0] = estado.opacidadeTexto[0] + (estado.direcaoFade * 0.01)
+    if estado.opacidadeTexto[0] >= 1.0 then
+        estado.opacidadeTexto[0] = 1.0
+        estado.direcaoFade = -1
+        estado.indiceCor = estado.indiceCor % #listaCores + 1
+    elseif estado.opacidadeTexto[0] <= 0.0 then
+        estado.opacidadeTexto[0] = 0.0
+        estado.direcaoFade = 1
     end
-
-    local shellderColor = shellderColorList[shellderColorIndex]
-    
-    local shellderY = windowPos.y + 40
-    local shellderX = windowSize.x / 2 - imgui.CalcTextSize("by Shellder").x / 2
-
-    draw:AddText(imgui.ImVec2(shellderX, shellderY), 
-                 rgba(shellderColor[1], shellderColor[2], shellderColor[3], shellderTextOpacity[0]), 
+    local corTexto = listaCores[estado.indiceCor]
+    local textoY = posJanela.y + 40
+    local textoX = tamanhoJanela.x / 2 - imgui.CalcTextSize("by Shellder").x / 2
+    desenho:AddText(imgui.ImVec2(textoX, textoY), 
+                 rgba(corTexto[1], corTexto[2], corTexto[3], estado.opacidadeTexto[0]), 
                  "by Shellder")
-
     imgui.Spacing()
     imgui.Spacing()
-    
-    if imgui.BeginTabBar("##HUDTabs") then
-        if imgui.BeginTabItem("AJUSTES DE POSICAO") then
-            if imgui.CollapsingHeader("AJUSTAR VIDA/COLETE", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.Checkbox("MOVER VIDA/COLETE JUNTOS", moveTogether)
-                
-                if moveTogether[0] then
-                    imgui.Text("POSICAO VIDA/COLETE")
-                    if imgui.SliderInt("VIDA/COLETE X", vidaX, 0, 3000) then
-                        coleteX[0] = vidaX[0]
+    if imgui.BeginTabBar("##AbasHUD") then
+        if imgui.BeginTabItem("ESTILO HUD") then
+            imgui.Text("ESCOLHA O ESTILO DO HUD")
+            if imgui.BeginCombo("ESTILO HUD", estilosHUD[variaveis.estiloHUD[0] + 1]) then
+                for i = 0, #estilosHUD - 1 do
+                    if imgui.Selectable(estilosHUD[i + 1], variaveis.estiloHUD[0] == i) then
+                        variaveis.estiloHUD[0] = i
                     end
-                    if imgui.SliderInt("VIDA/COLETE Y", vidaY, 0, 3000) then
-                        coleteY[0] = vidaY[0] + 42
-                    end
-                else
-                    imgui.Text("POSICAO VIDA (X, Y):")
-                    imgui.SliderInt("VIDA X", vidaX, 0, 3000)
-                    imgui.SliderInt("VIDA Y", vidaY, 0, 3000)
-                    
-                    imgui.Text("POSICAO COLETE (X, Y):")
-                    imgui.SliderInt("COLETE X", coleteX, 0, 3000)
-                    imgui.SliderInt("COLETE Y", coleteY, 0, 3000)
                 end
-                
-                imgui.Text("AJUSTAR VIDA")
-                imgui.SliderInt("LARGURA VIDA", vidaWidth, 30, 300)
-                imgui.SliderInt("ALTURA VIDA", vidaHeight, 10, 80)
-                
-                imgui.Text("AJUSTAR COLETE")
-                imgui.SliderInt("LARGURA COLETE", coleteWidth, 30, 300)
-                imgui.SliderInt("ALTURA COLETE", coleteHeight, 10, 80)
-                
-                imgui.Text("TAMANHO FONTE VIDA/COLETE")
-                imgui.Checkbox("AJUSTAR FONTES", moveFontsTogether)
-                
-                if moveFontsTogether[0] then
-                    if imgui.SliderFloat("TAMANHO HP/AP", hpFontSize, 8.0, 30.0) then
-                        apFontSize[0] = hpFontSize[0]
-                    end
-                else
-                    imgui.SliderFloat("TAMANHO HP", hpFontSize, 8.0, 30.0)
-                    imgui.SliderFloat("TAMANHO AP", apFontSize, 8.0, 30.0)
-                end
+                imgui.EndCombo()
             end
-
             imgui.Spacing()
-
-            if imgui.CollapsingHeader("AJUSTAR DINHEIRO", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.Text("AJUSTAR DINHEIRO")
-                imgui.SliderInt("MONEY X", moneyX, 0, 3000)
-                imgui.SliderInt("MONEY Y", moneyY, 0, 3000)
-                
-                imgui.Text("TAMANHO FONTE DO DINHEIRO")
-                imgui.SliderFloat("TAMANHO FONTE", moneyFontSize, 8.0, 30.0)
+            imgui.Separator()
+            imgui.Spacing()
+            if imgui.CollapsingHeader("OPÇÕES DE EXIBIÇÃO", imgui.TreeNodeFlags.DefaultOpen) then
+                imgui.Checkbox("Contador Vida/Colete", variaveis.somenteNumerosHPAP)
+                imgui.Checkbox("Ativar/Desativar Ícones", variaveis.emojisAtivados)
             end
-            
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            if imgui.CollapsingHeader("CONFIGURAÇÃO DE ÍCONES", imgui.TreeNodeFlags.DefaultOpen) then
+                imgui.Text("Posição Dos Ícones")
+                imgui.SliderInt("Posição X", variaveis.deslocamentoIconeX, -200, 200)
+                imgui.SliderInt("Posição Y", variaveis.deslocamentoIconeY, -200, 200)
+                imgui.Text("Tamanho Dos Ícones")
+                imgui.SliderFloat("Tamanho", variaveis.tamanhoIcone, 10.0, 30.0)
+                imgui.Text("")
+            end
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            if imgui.CollapsingHeader("CONFIGURAÇÃO DE FONTES", imgui.TreeNodeFlags.DefaultOpen) then
+                imgui.Text("POSIÇÃO DO CONTADOR DE VIDA")
+                imgui.SliderInt("FONTE X", variaveis.fonteHPX, -1000, 1000)
+                imgui.SliderInt("FONTE Y", variaveis.fonteHPY, -1000, 1000)
+                imgui.Text("POSIÇÃO DO CONTADOR DE COLETE")
+                imgui.SliderInt("FONTE X", variaveis.fonteAPX, -1000, 1000)
+                imgui.SliderInt("FONTE Y", variaveis.fonteAPY, -1000, 1000)
+                imgui.Text("TAMANHO DOS CONTADORES")
+                imgui.SliderFloat("FONTE DE VIDA", variaveis.tamanhoFonteHP, 8.0, 30.0)
+                imgui.SliderFloat("FONTE DE COLETE", variaveis.tamanhoFonteAP, 8.0, 30.0)
+                imgui.Text("")
+            end
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            if variaveis.estiloHUD[0] == 0 then
+                if imgui.CollapsingHeader("AJUSTAR VIDA/COLETE", imgui.TreeNodeFlags.DefaultOpen) then
+                    imgui.Checkbox("Mover Vida/colete Juntos", variaveis.moverJuntos)
+                    if variaveis.moverJuntos[0] then
+                        imgui.Text("Posicao Da Vida/colete")
+                        if imgui.SliderInt("VIDA/COLETE X", variaveis.vidaX, 0, 3000) then
+                            variaveis.coleteX[0] = variaveis.vidaX[0]
+                        end
+                        if imgui.SliderInt("Vida/colete Y", variaveis.vidaY, 0, 3000) then
+                            variaveis.coleteY[0] = variaveis.vidaY[0] + 42
+                        end
+                    else
+                        imgui.Text("POSICAO VIDA (X, Y):")
+                        imgui.SliderInt("Vida X", variaveis.vidaX, 0, 3000)
+                        imgui.SliderInt("Vida Y", variaveis.vidaY, 0, 3000)
+                        imgui.Spacing()
+                        imgui.Separator()
+                        imgui.Spacing()
+                        imgui.SliderInt("Colete X", variaveis.coleteX, 0, 3000)
+                        imgui.SliderInt("Colete Y", variaveis.coleteY, 0, 3000)
+                    end
+                    imgui.Text("Ajustar Vida")
+                    imgui.SliderInt("Largura Vida", variaveis.vidaLargura, 30, 300)
+                    imgui.SliderInt("Altura Vida", variaveis.vidaAltura, 10, 80)
+                    imgui.Text("Ajustar Colete")
+                    imgui.SliderInt("Largura Colete", variaveis.coleteLargura, 30, 300)
+                    imgui.SliderInt("Altura Colete", variaveis.coleteAltura, 10, 80)
+                end
+            else
+                if imgui.CollapsingHeader("AJUSTAR BARRA VIDA/COLETE", imgui.TreeNodeFlags.DefaultOpen) then
+                    imgui.Text("Posicao Das Barras")
+                    imgui.SliderInt("Barras X", variaveis.vidaX, 0, 3000)
+                    imgui.SliderInt("Barras Y", variaveis.vidaY, 0, 3000)
+                    imgui.Text("")
+                end
+            end
+            imgui.Spacing()
+            if imgui.CollapsingHeader("Dinheiro Configs", imgui.TreeNodeFlags.DefaultOpen) then
+                imgui.Text("Ajustar Dinheiro")
+                imgui.SliderInt("Dinheiro X", variaveis.dinheiroX, 0, 3000)
+                imgui.SliderInt("Dinheiro Y", variaveis.dinheiroY, 0, 3000)
+                imgui.Text("Tamanho Da Fonte")
+                imgui.SliderFloat("Fonte", variaveis.tamanhoFonteDinheiro, 8.0, 30.0)
+            end
             imgui.EndTabItem()
         end
-        
         if imgui.BeginTabItem("CORES HUD") then
             if imgui.CollapsingHeader("CORES DO HUD", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.Text("COR DA BARRA DE VIDA")
-                imgui.ColorEdit4(" VIDA", vidaColor)
+                imgui.ColorEdit4(" VIDA", variaveis.corVida)
                 imgui.Separator()
-                imgui.Text("COR DA BARRA DE COLETE")
-                imgui.ColorEdit4(" COLETE", coleteColor)
+                imgui.ColorEdit4(" COLETE", variaveis.corColete)
                 imgui.Separator()
-                imgui.Text("COR DO DINHEIRO")
-                imgui.ColorEdit4(" DINHEIRO", moneyColor)
+                imgui.ColorEdit4(" DINHEIRO", variaveis.corDinheiro)
                 imgui.Separator()
-                imgui.Text("COR DAS FONTES")
-                imgui.ColorEdit4(" FONTES", fontColor)
+                imgui.ColorEdit4(" FONTE", variaveis.corFonte)
+                imgui.Separator()
+                imgui.ColorEdit4("DINHEIRO", variaveis.corBordaDinheiro)
+                imgui.Separator()
+                imgui.ColorEdit4("BORDA", variaveis.corBorda)
+                imgui.Separator()
+                imgui.ColorEdit4("COR MIRA", variaveis.corMira)
+                imgui.Separator()
+                imgui.ColorEdit4("BORDA MIRA", variaveis.corBordaMira)
             end
-            
             imgui.Spacing()
-            
             if imgui.CollapsingHeader("BORDA DO HUD (VIDA/COLETE)", imgui.TreeNodeFlags.DefaultOpen) then
                 imgui.Spacing()
                 imgui.Separator()
                 imgui.Spacing()
-                
-                imgui.Text("ESTILO DA BORDA (ARREDONDAMENTO)")
-                imgui.Text(string.format("BORDA ATUAL: %.1f", borderRadius[0]))
-                
-                imgui.BeginGroup()
-                if imgui.Button("-", imgui.ImVec2(40, 30)) then
-                    if borderRadius[0] > 0.0 then
-                        borderRadius[0] = borderRadius[0] - 0.5
+                if variaveis.estiloHUD[0] == 0 then
+                    imgui.Text("ESTILO DA BORDA (ARREDONDAMENTO)")
+                    imgui.Text(string.format("BORDA ATUAL: %.1f", variaveis.raioBorda[0]))
+                    imgui.BeginGroup()
+                    if imgui.Button("-", imgui.ImVec2(40, 30)) then
+                        if variaveis.raioBorda[0] > 0.0 then
+                            variaveis.raioBorda[0] = variaveis.raioBorda[0] - 0.5
+                        end
                     end
-                end
-                
-                imgui.SameLine()
-                
-                if imgui.Button("+", imgui.ImVec2(40, 30)) then
-                    if borderRadius[0] < 20.0 then
-                        borderRadius[0] = borderRadius[0] + 0.5
+                    imgui.SameLine()
+                    if imgui.Button("+", imgui.ImVec2(40, 30)) then
+                        if variaveis.raioBorda[0] < 20.0 then
+                            variaveis.raioBorda[0] = variaveis.raioBorda[0] + 0.5
+                        end
                     end
+                    imgui.EndGroup()
+                    imgui.Spacing()
+                    imgui.Separator()
+                    imgui.Spacing()
                 end
-                imgui.EndGroup()
-                
+                imgui.Checkbox("Ativar Bordas", variaveis.bordaAtivada)
+                if variaveis.bordaAtivada[0] then
+                    imgui.SliderFloat("LARGURA", variaveis.tamanhoBorda, 0.5, 10.0)
+                end
                 imgui.Spacing()
                 imgui.Separator()
                 imgui.Spacing()
-                
-                imgui.Text("BORDA EXTERNA VIDA/COLETE")
-                imgui.Checkbox("ATIVAR BORDA EXTERNA", borderEnabled)
-                
-                if borderEnabled[0] then
-                    imgui.Text("TAMANHO DA BORDA")
-                    imgui.SliderFloat("LARGURA BORDA", borderSize, 0.5, 10.0)
-                    
-                    imgui.Text("COR DA BORDA")
-                    imgui.ColorEdit4("COR BORDA", borderColor)
-                end
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                imgui.Text("BORDA DA FONTE DO DINHEIRO")
-                imgui.SliderFloat("LARGURA BORDA DO DINHEIRO", moneyBorderSize, 0.5, 5.0)
-                
-                imgui.Text("COR DA BORDA DO DINHEIRO")
-                imgui.ColorEdit4("COR BORDA DINHEIRO", moneyBorderColor)
+                imgui.SliderFloat("DINHEIRO", variaveis.tamanhoBordaDinheiro, 0.5, 5.0)
             end
-            
             imgui.EndTabItem()
         end
-
         if imgui.BeginTabItem("MIRA EXTERNA") then
             if imgui.CollapsingHeader("Mira Externa", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.Checkbox("ATIVAR MIRA", miraEnabled)
-                
-                if miraEnabled[0] then
-                    imgui.Text("TIPO DE MIRA")
-                    local currentMiraType = miraTipo[0]
-                    if imgui.BeginCombo("ESCOLHA O TIPO", miraTipos[currentMiraType + 1]) then
-                        for i = 0, 9 do
-                            if imgui.Selectable(miraTipos[i + 1], currentMiraType == i) then
-                                miraTipo[0] = i
+                imgui.Checkbox("ATIVAR MIRA", variaveis.miraAtivada)
+                if variaveis.miraAtivada[0] then
+                    local tipoMiraAtual = variaveis.miraTipo[0]
+                    if imgui.BeginCombo(" TIPO", tiposMira[tipoMiraAtual + 1]) then
+                        for i = 0, 29 do
+                            if imgui.Selectable(tiposMira[i + 1], tipoMiraAtual == i) then
+                                variaveis.miraTipo[0] = i
                             end
                         end
                         imgui.EndCombo()
                     end
-                    
-                    imgui.Text("PREVIEW: " .. miraTipos[miraTipo[0] + 1])
-                    
-                    imgui.Text("POSICAO DA MIRA")
-                    imgui.SliderInt("MIRA X", miraX, -100, 100)
-                    imgui.SliderInt("MIRA Y", miraY, -100, 100)
-                    
-                    imgui.Text("TAMANHO DA MIRA")
-                    imgui.SliderFloat("TAMANHO", miraSize, 2.0, 50.0)
-                    imgui.SliderFloat("LARGURA", miraWidth, 1.0, 10.0)
-                    
-                    imgui.Text("COR DA MIRA")
-                    imgui.ColorEdit4("COR MIRA", miraColor)
-                    
+                    imgui.Separator()
+                    imgui.Text("Posicao Da Mira")
+                    imgui.SliderInt("MIRA X", variaveis.miraX, -100, 100)
+                    imgui.SliderInt("MIRA Y", variaveis.miraY, -100, 100)
+                    imgui.Separator()
+                    imgui.SliderFloat(" TAMANHO", variaveis.miraTamanho, 2.0, 50.0)
+                    imgui.SliderFloat(" LARGURA", variaveis.miraLargura, 1.0, 10.0)
                     imgui.Spacing()
                     imgui.Separator()
                     imgui.Spacing()
-                    
-                    imgui.Text("BORDA DA MIRA")
-                    imgui.Checkbox("ATIVAR BORDA", miraBorderEnabled)
-                    
-                    if miraBorderEnabled[0] then
-                        imgui.Text("TAMANHO DA BORDA")
-                        imgui.SliderFloat("LARGURA BORDA", miraBorderSize, 0.5, 5.0)
-                        
-                        imgui.Text("COR DA BORDA")
-                        imgui.ColorEdit4("COR BORDA", miraBorderColor)
+                    imgui.Checkbox("Ativar Borda", variaveis.miraBordaAtivada)
+                    if variaveis.miraBordaAtivada[0] then
+                        imgui.SliderFloat("LARGURA BORDA", variaveis.miraTamanhoBorda, 0.5, 5.0)
                     end
                 end
             end
             imgui.EndTabItem()
         end
-
         if imgui.BeginTabItem("MODS EXTRAS") then
             if imgui.CollapsingHeader("MODIFICADOR DE CLIMA/HORA", imgui.TreeNodeFlags.DefaultOpen) then
-                CenterText("Hora")
+                TextoCentralizado("Hora")
                 imgui.PushItemWidth(230)
-                imgui.SliderInt("##time", timeId, 0, 23)
-                imgui.Spacing()
-                CenterText("Clima")
-                imgui.SliderInt("##weather", weatherId, 0, 45)
+                imgui.SliderInt("##tempo", variaveis.tempoId, 0, 23)
+                TextoCentralizado("Clima")
+                imgui.SliderInt("##clima", variaveis.climaId, 0, 45)
                 imgui.PopItemWidth()
                 imgui.Spacing()
                 imgui.Separator()
                 imgui.Spacing()
-
-                if isWeatherActive[0] then
-                    if imgui.Button("DESATIVAR CLIMA/HORA", imgui.ImVec2(190, 35)) then
-                        isWeatherActive[0] = false
+                if variaveis.climaAtivo[0] then
+                    if imgui.Button("DESATIVAR", imgui.ImVec2(190, 35)) then
+                        variaveis.climaAtivo[0] = false
                     end
                 else
-                    if imgui.Button("ATIVAR CLIMA/HORA", imgui.ImVec2(190, 35)) then
-                        isWeatherActive[0] = true
+                    if imgui.Button("ATIVAR", imgui.ImVec2(190, 35)) then
+                        variaveis.climaAtivo[0] = true
                     end
                 end
             end
-
             imgui.Spacing()
             imgui.Separator()
             imgui.Spacing()
-
             if imgui.CollapsingHeader("FAKE PC - by Shellder", imgui.TreeNodeFlags.DefaultOpen) then
-                CenterText("FAKE PC - by Shellder")
                 imgui.Spacing()
-                if isFakePcActive[0] then
-                    if imgui.Button("DESATIVAR FAKE PC", imgui.ImVec2(190, 35)) then
-                        isFakePcActive[0] = false
+                if variaveis.fakePcAtivo[0] then
+                    if imgui.Button("DESATIVAR", imgui.ImVec2(190, 35)) then
+                        variaveis.fakePcAtivo[0] = false
                     end
                 else
-                    if imgui.Button("ATIVAR FAKE PC", imgui.ImVec2(190, 35)) then
-                        isFakePcActive[0] = true
+                    if imgui.Button("ATIVAR", imgui.ImVec2(190, 35)) then
+                        variaveis.fakePcAtivo[0] = true
                     end
                 end
             end
-
             imgui.Spacing()
             imgui.Separator()
             imgui.Spacing()
-
-            if imgui.CollapsingHeader("FOV CHANGER - by beavers_best", imgui.TreeNodeFlags.DefaultOpen) then
-                CenterText("FOV CHANGER")
+            if imgui.CollapsingHeader("FOV CHANGER - by Shellder", imgui.TreeNodeFlags.DefaultOpen) then
                 imgui.Spacing()
-                
-                imgui.Checkbox("ATIVAR FOV CHANGER", fovEnabled)
-                
-                if fovEnabled[0] then
-                    imgui.Text("VALOR DO FOV")
-                    imgui.SliderInt("FOV", fovValue, 10, 135)
-                    
+                imgui.Checkbox("ATIVAR FOV CHANGER", variaveis.fovAtivado)
+                if variaveis.fovAtivado[0] then
+                    imgui.SliderInt("FOV", variaveis.valorFov, 10, 135)
                     if imgui.Button("RESETAR FOV", imgui.ImVec2(190, 35)) then
-                        fovValue[0] = 60
+                        variaveis.valorFov[0] = 60
                     end
                 else
                     if imgui.Button("ATIVAR FOV CHANGER", imgui.ImVec2(190, 35)) then
-                        fovEnabled[0] = true
+                        variaveis.fovAtivado[0] = true
                     end
                 end
             end
-
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-
-            if imgui.CollapsingHeader("SISTEMA DE VOIP - by Shellder", imgui.TreeNodeFlags.DefaultOpen) then
-                CenterText("CONTROLE DE VOIP")
-                imgui.Spacing()
-                
-                if imgui.Checkbox("ATIVAR FACK VOIP", imageConfig.enabled) then
-                    if imageConfig.enabled[0] and not imageConfig.texture then
-                        loadImageTexture()
-                    end
-                end
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                imgui.Text("POSICAO DO VOIP")
-                imgui.SliderInt("POSICAO X", imageConfig.x, 0, 2000)
-                imgui.SliderInt("POSICAO Y", imageConfig.y, 0, 2000)
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                imgui.Text("TAMANHO DO VOIP")
-                imgui.SliderInt("LARGURA", imageConfig.width, 50, 1000)
-                imgui.SliderInt("ALTURA", imageConfig.height, 50, 1000)
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                if imgui.Button("RECARREGAR VOIP", imgui.ImVec2(190, 35)) then
-                    loadImageTexture()
-                end
-                
-                imgui.SameLine()
-                
-                if imgui.Button("RESETAR CONFIG", imgui.ImVec2(190, 35)) then
-                    imageConfig.x[0] = 100
-                    imageConfig.y[0] = 100
-                    imageConfig.width[0] = 200
-                    imageConfig.height[0] = 200
-                end
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                imgui.Text("STATUS DO VOIP: " .. (imageConfig.voipActive and "ATIVO" or "INATIVO"))
-                imgui.Text("IMAGEM ATUAL: " .. (imageConfig.voipActive and "shellder2.png" or "shellder.png"))
-            end
-
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-
-            if imgui.CollapsingHeader("BOTÃO VOIP - by Shellder", imgui.TreeNodeFlags.DefaultOpen) then
-                CenterText("CONFIGURAÇÃO DO BOTÃO VOIP")
-                imgui.Spacing()
-                
-                imgui.Checkbox("ATIVAR BOTÃO VOIP", buttonConfig.enabled)
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                imgui.Text("POSIÇÃO DO BOTÃO")
-                imgui.SliderInt("BOTÃO X", buttonConfig.x, 0, 2000)
-                imgui.SliderInt("BOTÃO Y", buttonConfig.y, 0, 2000)
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                imgui.Text("TAMANHO DO BOTÃO")
-                imgui.SliderInt("TAMANHO DO BOTÃO", buttonConfig.size, 20, 200)
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                imgui.Text("CORES DO BOTÃO (OPACIDADE)")
-                imgui.ColorEdit4("COR NORMAL", buttonConfig.color)
-                imgui.ColorEdit4("COR HOVER", buttonConfig.hoverColor)
-                imgui.ColorEdit4("COR ATIVO", buttonConfig.activeColor)
-                
-                imgui.Spacing()
-                imgui.Separator()
-                imgui.Spacing()
-                
-                if imgui.Button("TESTAR BOTÃO", imgui.ImVec2(190, 35)) then
-                    toggleVoip()
-                end
-                
-                imgui.SameLine()
-                
-                if imgui.Button("RESETAR BOTÃO", imgui.ImVec2(190, 35)) then
-                    buttonConfig.x[0] = 50
-                    buttonConfig.y[0] = 50
-                    buttonConfig.size[0] = 60
-                    buttonConfig.color[0] = 0.0
-                    buttonConfig.color[1] = 0.0
-                    buttonConfig.color[2] = 0.0
-                    buttonConfig.color[3] = 0.5
-                    buttonConfig.hoverColor[0] = 0.0
-                    buttonConfig.hoverColor[1] = 0.0
-                    buttonConfig.hoverColor[2] = 0.0
-                    buttonConfig.hoverColor[3] = 0.7
-                    buttonConfig.activeColor[0] = 0.0
-                    buttonConfig.activeColor[1] = 0.0
-                    buttonConfig.activeColor[2] = 0.0
-                    buttonConfig.activeColor[3] = 0.9
-                end
-            end
-
             imgui.SameLine()
-
             if imgui.Button("D", imgui.ImVec2(35, 35)) then
-                openLink("https://discord.gg/bU8SEBDP22")
+                abrirLink("https://discord.gg/bU8SEBDP22")
             end
-            
             imgui.EndTabItem()
         end
-        
         imgui.EndTabBar()
     end
-
-    imgui.Spacing()
     imgui.Spacing()
     imgui.Separator()
     imgui.Spacing()
-    
-    if imgui.Button("SALVAR", imgui.ImVec2(120, 30)) then
-        saveConfig()
+    if imgui.Button("RESETAR TUDO", imgui.ImVec2(120, 30)) then
+        resetarConfiguracao()
     end
-    
     imgui.SameLine()
-    
     if imgui.Button("FECHAR", imgui.ImVec2(120, 30)) then
-        editMode[0] = false
+        estado.modoEdicao[0] = false
+        salvarConfig()
     end
-
     imgui.End()
-    
     imgui.PopStyleColor(18) 
 end)
 
-local fakePcVersion = "0.3.7"
-local lastUnoccupiedSyncTime = 0
-
-function a.onSendClientJoin(c, d, e, f, g, h, i)
-    if isFakePcActive[0] then
-        h = fakePcVersion
+function eventos.onSendClientJoin(c, d, e, f, g, h, i)
+    if config.fakePcAtivo then
+        h = estado.versaoFakePc
         g = '3917818323CD3E248B7722EB5CBCED04CE5B4DBF67E'
         local j = 1
         return { c, j, e, f, g, h, i }
@@ -1350,12 +2013,11 @@ function a.onSendClientJoin(c, d, e, f, g, h, i)
     return nil
 end
 
-function a.onSendPlayerSync(k)
-    if isFakePcActive[0] then
+function eventos.onSendPlayerSync(k)
+    if config.fakePcAtivo then
         if k.weapon == 44 or k.weapon == 45 or k.weapon == 46 then
             k.weapon = 0
         end
-
         if k.leftRightKeys ~= 0 and k.leftRightKeys ~= 128 and k.leftRightKeys ~= 65408 then
             if k.leftRightKeys > 0 then
                 k.leftRightKeys = 128
@@ -1363,7 +2025,6 @@ function a.onSendPlayerSync(k)
                 k.leftRightKeys = 65408
             end
         end
-
         if k.upDownKeys ~= 0 and k.upDownKeys ~= 128 and k.upDownKeys ~= 65408 then
             if k.upDownKeys > 0 then
                 k.upDownKeys = 128
@@ -1371,11 +2032,9 @@ function a.onSendPlayerSync(k)
                 k.upDownKeys = 65408
             end
         end
-
         if k.upDownKeys == 65408 or k.keysData == 4 then
             k.animationId = 0
         end
-
         if k.specialAction ~= nil and k.specialAction ~= 0 and k.specialAction ~= 1 then
             k.specialAction = 0
         end
@@ -1383,8 +2042,8 @@ function a.onSendPlayerSync(k)
     return k
 end
 
-function a.onSendVehicleSync(k)
-    if isFakePcActive[0] then
+function eventos.onSendVehicleSync(k)
+    if config.fakePcAtivo then
         if k.leftRightKeys ~= 0 and k.leftRightKeys ~= 128 and k.leftRightKeys ~= 65408 then
             if k.leftRightKeys > 0 then
                 k.leftRightKeys = 128
@@ -1396,8 +2055,8 @@ function a.onSendVehicleSync(k)
     return k
 end
 
-function a.onSendPassengerSync(k)
-    if isFakePcActive[0] then
+function eventos.onSendPassengerSync(k)
+    if config.fakePcAtivo then
         if k.leftRightKeys ~= 0 and k.leftRightKeys ~= 128 and k.leftRightKeys ~= 65408 then
             if k.leftRightKeys > 0 then
                 k.leftRightKeys = 128
@@ -1409,44 +2068,54 @@ function a.onSendPassengerSync(k)
     return k
 end
 
-function simulateUnoccupiedSync()
+function simularSyncDesocupado()
     local m = os.clock()
-    if m - lastUnoccupiedSyncTime > 5 then
-        lastUnoccupiedSyncTime = m
+    if m - estado.ultimoTempoSyncDesocupado > 5 then
+        estado.ultimoTempoSyncDesocupado = m
     end
 end
 
 function main()
-    loadConfig()
-    
+    carregarConfig()
     while not isSampAvailable() do 
         wait(0) 
     end
-
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
+    sampAddChatMessage("MOD ATUALIZANDO 10/11/2025" .. q, 0xFF0000)
     sampRegisterChatCommand("shell", function()
-        editMode[0] = not editMode[0]
+        estado.modoEdicao[0] = not estado.modoEdicao[0]
     end)
-    
     while true do
         wait(0)
         if isSampAvailable() then
             local hp = getCharHealth(PLAYER_PED)
             local ar = getCharArmour(PLAYER_PED)
-            if hp then vida = math.min(100, hp) end
-            if ar then colete = math.min(100, ar) end
-            dinheiro = getPlayerMoney(PLAYER_HANDLE) or 0
-
-            if isWeatherActive[0] then
-                setTimeOfDay(timeId[0], 0)
-                forceWeatherNow(weatherId[0])
+            if hp then estado.vida = math.min(100, hp) end
+            if ar then estado.colete = math.min(100, ar) end
+            estado.dinheiro = getPlayerMoney(PLAYER_HANDLE) or 0
+            if config.climaAtivo then
+                setTimeOfDay(config.tempoId, 0)
+                forceWeatherNow(config.climaId)
             end
-
-            if isFakePcActive[0] then
-                simulateUnoccupiedSync()
+            if config.fakePcAtivo then
+                simularSyncDesocupado()
             end
-
-            if fovEnabled[0] then
-                cameraSetLerpFov(fovValue[0], 101.0, 1000, true)
+            if config.fovAtivado then
+                cameraSetLerpFov(config.valorFov, 101.0, 1000, true)
             end
         end
     end
