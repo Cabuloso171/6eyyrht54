@@ -1,7 +1,14 @@
 local imgui = require "mimgui"
 local faicons = require "fAwesome6"
 local json = require "json"
-local eventos = require 'lib.samp.events'
+local memory = require "memory"
+local ffi = require "ffi"
+local monethook = require "monethook"
+local SAMemory = require "SAMemory"
+
+SAMemory.require("CCamera")
+local camera = SAMemory.camera
+require("SAMemory.shared").require("RenderWare")
 
 local configPadrao = {
     estiloHUD = 0,
@@ -49,11 +56,13 @@ local configPadrao = {
     tempoId = 12,
     climaId = 0,
     climaAtivo = false,
-    fakePcAtivo = false,
     fovAtivado = false,
     valorFov = 60,
     somenteNumerosHPAP = false,
     emojisAtivados = true,
+    sensibilidade = 50,
+    fixedZoom = 0,
+    renderDistance = 600
 }
 
 local config = {}
@@ -70,8 +79,8 @@ local estado = {
     direcaoFade = 1,
     indiceCor = 1,
     ultimoSalvamento = os.clock(),
-    versaoFakePc = "0.3.7",
-    ultimoTempoSyncDesocupado = 0
+    zoomLevel = 0,
+    fovAtivo = false
 }
 
 local listaCores = {
@@ -94,7 +103,6 @@ local tiposMira = {
     "Diamante",
     "Estrela",
     "Triangulo",
-    -- NOVAS MIRAS ADICIONADAS (20 tipos)
     "Cruz Fina",
     "Cruz Grossa", 
     "Circulo Duplo",
@@ -170,14 +178,15 @@ local variaveis = {
     tempoId = imgui.new.int(config.tempoId),
     climaId = imgui.new.int(config.climaId),
     climaAtivo = imgui.new.bool(config.climaAtivo),
-    fakePcAtivo = imgui.new.bool(config.fakePcAtivo),
     fovAtivado = imgui.new.bool(config.fovAtivado),
     valorFov = imgui.new.int(config.valorFov),
     somenteNumerosHPAP = imgui.new.bool(config.somenteNumerosHPAP),
-    emojisAtivados = imgui.new.bool(config.emojisAtivados)
+    emojisAtivados = imgui.new.bool(config.emojisAtivados),
+    sensibilidade = imgui.new.float(config.sensibilidade),
+    fixedZoom = imgui.new.float(config.fixedZoom),
+    renderDistance = imgui.new.float(config.renderDistance)
 }
 
-local ffi = require("ffi")
 local gtasa = ffi.load("GTASA")
 ffi.cdef("void _Z12AND_OpenLinkPKc(const char* link);")
 
@@ -245,11 +254,13 @@ local function salvarConfig()
     config.tempoId = variaveis.tempoId[0]
     config.climaId = variaveis.climaId[0]
     config.climaAtivo = variaveis.climaAtivo[0]
-    config.fakePcAtivo = variaveis.fakePcAtivo[0]
     config.fovAtivado = variaveis.fovAtivado[0]
     config.valorFov = variaveis.valorFov[0]
     config.somenteNumerosHPAP = variaveis.somenteNumerosHPAP[0]
     config.emojisAtivados = variaveis.emojisAtivados[0]
+    config.sensibilidade = variaveis.sensibilidade[0]
+    config.fixedZoom = variaveis.fixedZoom[0]
+    config.renderDistance = variaveis.renderDistance[0]
     
     local caminhoArquivo = "/storage/emulated/0/.hudeditshellderwsw.json"
     local arquivo = io.open(caminhoArquivo, "w")
@@ -333,11 +344,13 @@ local function resetarConfiguracao()
     variaveis.tempoId[0] = configPadrao.tempoId
     variaveis.climaId[0] = configPadrao.climaId
     variaveis.climaAtivo[0] = configPadrao.climaAtivo
-    variaveis.fakePcAtivo[0] = configPadrao.fakePcAtivo
     variaveis.fovAtivado[0] = configPadrao.fovAtivado
     variaveis.valorFov[0] = configPadrao.valorFov
     variaveis.somenteNumerosHPAP[0] = configPadrao.somenteNumerosHPAP
     variaveis.emojisAtivados[0] = configPadrao.emojisAtivados
+    variaveis.sensibilidade[0] = configPadrao.sensibilidade
+    variaveis.fixedZoom[0] = configPadrao.fixedZoom
+    variaveis.renderDistance[0] = configPadrao.renderDistance
     
     salvarConfig()
     sampAddChatMessage("{FFFFFF}[HUD EDIT] {FF0000}Configuracoes resetadas!", -1)
@@ -393,11 +406,13 @@ local function carregarConfig()
                 variaveis.tempoId[0] = salvo.tempoId or configPadrao.tempoId
                 variaveis.climaId[0] = salvo.climaId or configPadrao.climaId
                 variaveis.climaAtivo[0] = salvo.climaAtivo ~= nil and salvo.climaAtivo or configPadrao.climaAtivo
-                variaveis.fakePcAtivo[0] = salvo.fakePcAtivo ~= nil and salvo.fakePcAtivo or configPadrao.fakePcAtivo
                 variaveis.fovAtivado[0] = salvo.fovAtivado ~= nil and salvo.fovAtivado or configPadrao.fovAtivado
                 variaveis.valorFov[0] = salvo.valorFov or configPadrao.valorFov
                 variaveis.somenteNumerosHPAP[0] = salvo.somenteNumerosHPAP ~= nil and salvo.somenteNumerosHPAP or configPadrao.somenteNumerosHPAP
                 variaveis.emojisAtivados[0] = salvo.emojisAtivados ~= nil and salvo.emojisAtivados or configPadrao.emojisAtivados
+                variaveis.sensibilidade[0] = salvo.sensibilidade or configPadrao.sensibilidade
+                variaveis.fixedZoom[0] = salvo.fixedZoom or configPadrao.fixedZoom
+                variaveis.renderDistance[0] = salvo.renderDistance or configPadrao.renderDistance
                 
                 if salvo.corVida then
                     variaveis.corVida[0] = salvo.corVida[1] or configPadrao.corVida[1]
@@ -460,13 +475,26 @@ local function carregarConfig()
 end
 
 local function verificarMudancasESalvar()
-    local tempoAtual = os.clock()
-    if tempoAtual - estado.ultimoSalvamento > 2.0 then
-        if estado.modoEdicao[0] then
-            salvarConfig()
-            estado.ultimoSalvamento = tempoAtual
-        end
+    salvarConfig()
+end
+
+local sensibilidadeEndereco = MONET_GTASA_BASE + 6987568
+
+local function aplicarSensibilidade(valor)
+    memory.setfloat(sensibilidadeEndereco, 0.001 + valor / 3000)
+end
+
+local function setCameraRenderDistance(distancia)
+    camera.pRwCamera.farplane = distancia
+end
+
+local function setCameraZoom(zoom)
+    if isCurrentCharWeapon(PLAYER_PED, 34) and isCharPlayingAnim(PLAYER_PED, "gun_stand") or zoom == 0 then
+        camera.bUseScriptZoomValuePed = false
+    else
+        camera.bUseScriptZoomValuePed = true
     end
+    camera.fPedZoomValueScript = zoom
 end
 
 local fonteDinheiro, fonteHP, fonteAP
@@ -485,16 +513,23 @@ imgui.OnInitialize(function()
     imgui.GetIO().Fonts:Build()
 end)
 
+local function limitarBarra(percentual, larguraMaxima)
+    return math.min(percentual * larguraMaxima, larguraMaxima)
+end
+
 local function desenharHUDOriginal(desenho, pos)
     local vidaMaxima = 100
     local coleteMaximo = 100
     local percentualVida = math.min(estado.vida / vidaMaxima, 1.0)
     local percentualColete = math.min(estado.colete / coleteMaximo, 1.0)
-    local larguraBarraVida = percentualVida * config.vidaLargura
-    local larguraBarraColete = percentualColete * config.coleteLargura
+    
+    local larguraBarraVida = limitarBarra(percentualVida, config.vidaLargura)
+    local larguraBarraColete = limitarBarra(percentualColete, config.coleteLargura)
+    
     local fundoVida = imgui.ImVec2(pos.x + config.vidaX, pos.y + config.vidaY)
     local fimVida = imgui.ImVec2(pos.x + config.vidaX + config.vidaLargura, pos.y + config.vidaY + config.vidaAltura)
     local frenteVida = imgui.ImVec2(pos.x + config.vidaX + larguraBarraVida, pos.y + config.vidaY + config.vidaAltura)
+    
     desenho:AddRectFilled(fundoVida, fimVida, rgba(0.1, 0.1, 0.1, 0.8), config.raioBorda)
     if larguraBarraVida > 0 then
         desenho:AddRectFilled(fundoVida, frenteVida, rgba(config.corVida[1], config.corVida[2], config.corVida[3], config.corVida[4]), config.raioBorda)
@@ -526,6 +561,7 @@ local function desenharHUDOriginal(desenho, pos)
     local fundoColete = imgui.ImVec2(pos.x + config.coleteX, pos.y + config.coleteY)
     local fimColete = imgui.ImVec2(pos.x + config.coleteX + config.coleteLargura, pos.y + config.coleteY + config.coleteAltura)
     local frenteColete = imgui.ImVec2(pos.x + config.coleteX + larguraBarraColete, pos.y + config.coleteY + config.coleteAltura)
+    
     desenho:AddRectFilled(fundoColete, fimColete, rgba(0.1, 0.1, 0.1, 0.8), config.raioBorda)
     if larguraBarraColete > 0 then
         desenho:AddRectFilled(fundoColete, frenteColete, rgba(config.corColete[1], config.corColete[2], config.corColete[3], config.corColete[4]), config.raioBorda)
@@ -581,12 +617,17 @@ local function desenharHUDBarrinhaFina(desenho, pos)
     local x = config.vidaX
     local yVida = config.vidaY
     local yColete = yVida + alturaBarra + espacamento
+    
+    local larguraBarraVida = limitarBarra(percentualVida, larguraBarra)
+    local larguraBarraColete = limitarBarra(percentualColete, larguraBarra)
+    
     local fundoVida = imgui.ImVec2(pos.x + x, pos.y + yVida)
     local fimVida = imgui.ImVec2(pos.x + x + larguraBarra, pos.y + yVida + alturaBarra)
-    local frenteVida = imgui.ImVec2(pos.x + x + (percentualVida * larguraBarra), pos.y + yVida + alturaBarra)
+    local frenteVida = imgui.ImVec2(pos.x + x + larguraBarraVida, pos.y + yVida + alturaBarra)
     local fundoColete = imgui.ImVec2(pos.x + x, pos.y + yColete)
     local fimColete = imgui.ImVec2(pos.x + x + larguraBarra, pos.y + yColete + alturaBarra)
-    local frenteColete = imgui.ImVec2(pos.x + x + (percentualColete * larguraBarra), pos.y + yColete + alturaBarra)
+    local frenteColete = imgui.ImVec2(pos.x + x + larguraBarraColete, pos.y + yColete + alturaBarra)
+    
     desenho:AddRectFilled(fundoVida, fimVida, rgba(0.1, 0.1, 0.1, 0.8), 2.0)
     if percentualVida > 0 then
         desenho:AddRectFilled(fundoVida, frenteVida, rgba(config.corVida[1], config.corVida[2], config.corVida[3], config.corVida[4]), 2.0)
@@ -777,7 +818,6 @@ local function desenharMira(desenho, pos)
                 rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
                 config.miraLargura + (config.miraTamanhoBorda * 2)
             )
-        -- NOVAS MIRAS ADICIONADAS (20 tipos)
         elseif config.miraTipo == 10 then
             desenho:AddLine(
                 imgui.ImVec2(centroX - metadeTamanhoBorda, centroY),
@@ -920,7 +960,7 @@ local function desenharMira(desenho, pos)
             )
             desenho:AddLine(
                 imgui.ImVec2(centroX + tamanhoInterno, centroY - tamanhoInterno),
-                imgui.ImVec2(centroX - tamanhoInterno, centroY + tamanhoInterno),
+                imgui.ImVec2(centroX - tamanhoInterno, centroY + metadeTamanhoBorda),
                 rgba(config.corBordaMira[1], config.corBordaMira[2], config.corBordaMira[3], config.corBordaMira[4]),
                 1.0
             )
@@ -1128,7 +1168,6 @@ local function desenharMira(desenho, pos)
         end
     end
     
-    -- DESENHO PRINCIPAL DAS MIRAS
     if config.miraTipo == 0 then
         desenho:AddLine(
             imgui.ImVec2(centroX - metadeTamanho, centroY),
@@ -1249,7 +1288,6 @@ local function desenharMira(desenho, pos)
             rgba(config.corMira[1], config.corMira[2], config.corMira[3], config.corMira[4]),
             config.miraLargura
         )
-    -- NOVAS MIRAS ADICIONADAS (20 tipos) - DESENHO PRINCIPAL
     elseif config.miraTipo == 10 then
         desenho:AddLine(
             imgui.ImVec2(centroX - metadeTamanho, centroY),
@@ -1673,11 +1711,13 @@ imgui.OnFrame(function() return true end, function()
             elseif k == "tempoId" then config.tempoId = v[0]
             elseif k == "climaId" then config.climaId = v[0]
             elseif k == "climaAtivo" then config.climaAtivo = v[0]
-            elseif k == "fakePcAtivo" then config.fakePcAtivo = v[0]
             elseif k == "fovAtivado" then config.fovAtivado = v[0]
             elseif k == "valorFov" then config.valorFov = v[0]
             elseif k == "somenteNumerosHPAP" then config.somenteNumerosHPAP = v[0]
             elseif k == "emojisAtivados" then config.emojisAtivados = v[0]
+            elseif k == "sensibilidade" then config.sensibilidade = v[0]
+            elseif k == "fixedZoom" then config.fixedZoom = v[0]
+            elseif k == "renderDistance" then config.renderDistance = v[0]
             end
         end
         
@@ -1756,6 +1796,7 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
                 for i = 0, #estilosHUD - 1 do
                     if imgui.Selectable(estilosHUD[i + 1], variaveis.estiloHUD[0] == i) then
                         variaveis.estiloHUD[0] = i
+                        verificarMudancasESalvar()
                     end
                 end
                 imgui.EndCombo()
@@ -1764,18 +1805,28 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
             imgui.Separator()
             imgui.Spacing()
             if imgui.CollapsingHeader("OPÇÕES DE EXIBIÇÃO", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.Checkbox("Contador Vida/Colete", variaveis.somenteNumerosHPAP)
-                imgui.Checkbox("Ativar/Desativar Ícones", variaveis.emojisAtivados)
+                if imgui.Checkbox("Contador Vida/Colete", variaveis.somenteNumerosHPAP) then
+                    verificarMudancasESalvar()
+                end
+                if imgui.Checkbox("Ativar/Desativar Ícones", variaveis.emojisAtivados) then
+                    verificarMudancasESalvar()
+                end
             end
             imgui.Spacing()
             imgui.Separator()
             imgui.Spacing()
             if imgui.CollapsingHeader("CONFIGURAÇÃO DE ÍCONES", imgui.TreeNodeFlags.DefaultOpen) then
                 imgui.Text("Posição Dos Ícones")
-                imgui.SliderInt("Posição X", variaveis.deslocamentoIconeX, -200, 200)
-                imgui.SliderInt("Posição Y", variaveis.deslocamentoIconeY, -200, 200)
+                if imgui.SliderInt("Posição X", variaveis.deslocamentoIconeX, -200, 200) then
+                    verificarMudancasESalvar()
+                end
+                if imgui.SliderInt("Posição Y", variaveis.deslocamentoIconeY, -200, 200) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Text("Tamanho Dos Ícones")
-                imgui.SliderFloat("Tamanho", variaveis.tamanhoIcone, 10.0, 30.0)
+                if imgui.SliderFloat("Tamanho", variaveis.tamanhoIcone, 10.0, 30.0) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Text("")
             end
             imgui.Spacing()
@@ -1783,14 +1834,26 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
             imgui.Spacing()
             if imgui.CollapsingHeader("CONFIGURAÇÃO DE FONTES", imgui.TreeNodeFlags.DefaultOpen) then
                 imgui.Text("POSIÇÃO DO CONTADOR DE VIDA")
-                imgui.SliderInt("FONTE X", variaveis.fonteHPX, -1000, 1000)
-                imgui.SliderInt("FONTE Y", variaveis.fonteHPY, -1000, 1000)
+                if imgui.SliderInt("FONTE X", variaveis.fonteHPX, -1000, 1000) then
+                    verificarMudancasESalvar()
+                end
+                if imgui.SliderInt("FONTE Y", variaveis.fonteHPY, -1000, 1000) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Text("POSIÇÃO DO CONTADOR DE COLETE")
-                imgui.SliderInt("FONTE X", variaveis.fonteAPX, -1000, 1000)
-                imgui.SliderInt("FONTE Y", variaveis.fonteAPY, -1000, 1000)
+                if imgui.SliderInt("FONTE X", variaveis.fonteAPX, -1000, 1000) then
+                    verificarMudancasESalvar()
+                end
+                if imgui.SliderInt("FONTE Y", variaveis.fonteAPY, -1000, 1000) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Text("TAMANHO DOS CONTADORES")
-                imgui.SliderFloat("FONTE DE VIDA", variaveis.tamanhoFonteHP, 8.0, 30.0)
-                imgui.SliderFloat("FONTE DE COLETE", variaveis.tamanhoFonteAP, 8.0, 30.0)
+                if imgui.SliderFloat("FONTE DE VIDA", variaveis.tamanhoFonteHP, 8.0, 30.0) then
+                    verificarMudancasESalvar()
+                end
+                if imgui.SliderFloat("FONTE DE COLETE", variaveis.tamanhoFonteAP, 8.0, 30.0) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Text("")
             end
             imgui.Spacing()
@@ -1798,67 +1861,113 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
             imgui.Spacing()
             if variaveis.estiloHUD[0] == 0 then
                 if imgui.CollapsingHeader("AJUSTAR VIDA/COLETE", imgui.TreeNodeFlags.DefaultOpen) then
-                    imgui.Checkbox("Mover Vida/colete Juntos", variaveis.moverJuntos)
+                    if imgui.Checkbox("Mover Vida/colete Juntos", variaveis.moverJuntos) then
+                        verificarMudancasESalvar()
+                    end
                     if variaveis.moverJuntos[0] then
                         imgui.Text("Posicao Da Vida/colete")
                         if imgui.SliderInt("VIDA/COLETE X", variaveis.vidaX, 0, 3000) then
                             variaveis.coleteX[0] = variaveis.vidaX[0]
+                            verificarMudancasESalvar()
                         end
                         if imgui.SliderInt("Vida/colete Y", variaveis.vidaY, 0, 3000) then
                             variaveis.coleteY[0] = variaveis.vidaY[0] + 42
+                            verificarMudancasESalvar()
                         end
                     else
                         imgui.Text("POSICAO VIDA (X, Y):")
-                        imgui.SliderInt("Vida X", variaveis.vidaX, 0, 3000)
-                        imgui.SliderInt("Vida Y", variaveis.vidaY, 0, 3000)
+                        if imgui.SliderInt("Vida X", variaveis.vidaX, 0, 3000) then
+                            verificarMudancasESalvar()
+                        end
+                        if imgui.SliderInt("Vida Y", variaveis.vidaY, 0, 3000) then
+                            verificarMudancasESalvar()
+                        end
                         imgui.Spacing()
                         imgui.Separator()
                         imgui.Spacing()
-                        imgui.SliderInt("Colete X", variaveis.coleteX, 0, 3000)
-                        imgui.SliderInt("Colete Y", variaveis.coleteY, 0, 3000)
+                        if imgui.SliderInt("Colete X", variaveis.coleteX, 0, 3000) then
+                            verificarMudancasESalvar()
+                        end
+                        if imgui.SliderInt("Colete Y", variaveis.coleteY, 0, 3000) then
+                            verificarMudancasESalvar()
+                        end
                     end
                     imgui.Text("Ajustar Vida")
-                    imgui.SliderInt("Largura Vida", variaveis.vidaLargura, 30, 300)
-                    imgui.SliderInt("Altura Vida", variaveis.vidaAltura, 10, 80)
+                    if imgui.SliderInt("Largura Vida", variaveis.vidaLargura, 30, 300) then
+                        verificarMudancasESalvar()
+                    end
+                    if imgui.SliderInt("Altura Vida", variaveis.vidaAltura, 10, 80) then
+                        verificarMudancasESalvar()
+                    end
                     imgui.Text("Ajustar Colete")
-                    imgui.SliderInt("Largura Colete", variaveis.coleteLargura, 30, 300)
-                    imgui.SliderInt("Altura Colete", variaveis.coleteAltura, 10, 80)
+                    if imgui.SliderInt("Largura Colete", variaveis.coleteLargura, 30, 300) then
+                        verificarMudancasESalvar()
+                    end
+                    if imgui.SliderInt("Altura Colete", variaveis.coleteAltura, 10, 80) then
+                        verificarMudancasESalvar()
+                    end
                 end
             else
                 if imgui.CollapsingHeader("AJUSTAR BARRA VIDA/COLETE", imgui.TreeNodeFlags.DefaultOpen) then
                     imgui.Text("Posicao Das Barras")
-                    imgui.SliderInt("Barras X", variaveis.vidaX, 0, 3000)
-                    imgui.SliderInt("Barras Y", variaveis.vidaY, 0, 3000)
+                    if imgui.SliderInt("Barras X", variaveis.vidaX, 0, 3000) then
+                        verificarMudancasESalvar()
+                    end
+                    if imgui.SliderInt("Barras Y", variaveis.vidaY, 0, 3000) then
+                        verificarMudancasESalvar()
+                    end
                     imgui.Text("")
                 end
             end
             imgui.Spacing()
             if imgui.CollapsingHeader("Dinheiro Configs", imgui.TreeNodeFlags.DefaultOpen) then
                 imgui.Text("Ajustar Dinheiro")
-                imgui.SliderInt("Dinheiro X", variaveis.dinheiroX, 0, 3000)
-                imgui.SliderInt("Dinheiro Y", variaveis.dinheiroY, 0, 3000)
+                if imgui.SliderInt("Dinheiro X", variaveis.dinheiroX, 0, 3000) then
+                    verificarMudancasESalvar()
+                end
+                if imgui.SliderInt("Dinheiro Y", variaveis.dinheiroY, 0, 3000) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Text("Tamanho Da Fonte")
-                imgui.SliderFloat("Fonte", variaveis.tamanhoFonteDinheiro, 8.0, 30.0)
+                if imgui.SliderFloat("Fonte", variaveis.tamanhoFonteDinheiro, 8.0, 30.0) then
+                    verificarMudancasESalvar()
+                end
             end
             imgui.EndTabItem()
         end
         if imgui.BeginTabItem("CORES HUD") then
             if imgui.CollapsingHeader("CORES DO HUD", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.ColorEdit4(" VIDA", variaveis.corVida)
+                if imgui.ColorEdit4(" VIDA", variaveis.corVida) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Separator()
-                imgui.ColorEdit4(" COLETE", variaveis.corColete)
+                if imgui.ColorEdit4(" COLETE", variaveis.corColete) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Separator()
-                imgui.ColorEdit4(" DINHEIRO", variaveis.corDinheiro)
+                if imgui.ColorEdit4(" DINHEIRO", variaveis.corDinheiro) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Separator()
-                imgui.ColorEdit4(" FONTE", variaveis.corFonte)
+                if imgui.ColorEdit4(" FONTE", variaveis.corFonte) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Separator()
-                imgui.ColorEdit4("DINHEIRO", variaveis.corBordaDinheiro)
+                if imgui.ColorEdit4("DINHEIRO", variaveis.corBordaDinheiro) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Separator()
-                imgui.ColorEdit4("BORDA", variaveis.corBorda)
+                if imgui.ColorEdit4("BORDA", variaveis.corBorda) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Separator()
-                imgui.ColorEdit4("COR MIRA", variaveis.corMira)
+                if imgui.ColorEdit4("COR MIRA", variaveis.corMira) then
+                    verificarMudancasESalvar()
+                end
                 imgui.Separator()
-                imgui.ColorEdit4("BORDA MIRA", variaveis.corBordaMira)
+                if imgui.ColorEdit4("BORDA MIRA", variaveis.corBordaMira) then
+                    verificarMudancasESalvar()
+                end
             end
             imgui.Spacing()
             if imgui.CollapsingHeader("BORDA DO HUD (VIDA/COLETE)", imgui.TreeNodeFlags.DefaultOpen) then
@@ -1872,12 +1981,14 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
                     if imgui.Button("-", imgui.ImVec2(40, 30)) then
                         if variaveis.raioBorda[0] > 0.0 then
                             variaveis.raioBorda[0] = variaveis.raioBorda[0] - 0.5
+                            verificarMudancasESalvar()
                         end
                     end
                     imgui.SameLine()
                     if imgui.Button("+", imgui.ImVec2(40, 30)) then
                         if variaveis.raioBorda[0] < 20.0 then
                             variaveis.raioBorda[0] = variaveis.raioBorda[0] + 0.5
+                            verificarMudancasESalvar()
                         end
                     end
                     imgui.EndGroup()
@@ -1885,43 +1996,64 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
                     imgui.Separator()
                     imgui.Spacing()
                 end
-                imgui.Checkbox("Ativar Bordas", variaveis.bordaAtivada)
+                if imgui.Checkbox("Ativar Bordas", variaveis.bordaAtivada) then
+                    verificarMudancasESalvar()
+                end
                 if variaveis.bordaAtivada[0] then
-                    imgui.SliderFloat("LARGURA", variaveis.tamanhoBorda, 0.5, 10.0)
+                    if imgui.SliderFloat("LARGURA", variaveis.tamanhoBorda, 0.5, 10.0) then
+                        verificarMudancasESalvar()
+                    end
                 end
                 imgui.Spacing()
                 imgui.Separator()
                 imgui.Spacing()
-                imgui.SliderFloat("DINHEIRO", variaveis.tamanhoBordaDinheiro, 0.5, 5.0)
+                if imgui.SliderFloat("DINHEIRO", variaveis.tamanhoBordaDinheiro, 0.5, 5.0) then
+                    verificarMudancasESalvar()
+                end
             end
             imgui.EndTabItem()
         end
         if imgui.BeginTabItem("MIRA EXTERNA") then
             if imgui.CollapsingHeader("Mira Externa", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.Checkbox("ATIVAR MIRA", variaveis.miraAtivada)
+                if imgui.Checkbox("ATIVAR MIRA", variaveis.miraAtivada) then
+                    verificarMudancasESalvar()
+                end
                 if variaveis.miraAtivada[0] then
                     local tipoMiraAtual = variaveis.miraTipo[0]
                     if imgui.BeginCombo(" TIPO", tiposMira[tipoMiraAtual + 1]) then
                         for i = 0, 29 do
                             if imgui.Selectable(tiposMira[i + 1], tipoMiraAtual == i) then
                                 variaveis.miraTipo[0] = i
+                                verificarMudancasESalvar()
                             end
                         end
                         imgui.EndCombo()
                     end
                     imgui.Separator()
                     imgui.Text("Posicao Da Mira")
-                    imgui.SliderInt("MIRA X", variaveis.miraX, -100, 100)
-                    imgui.SliderInt("MIRA Y", variaveis.miraY, -100, 100)
+                    if imgui.SliderInt("MIRA X", variaveis.miraX, -100, 100) then
+                        verificarMudancasESalvar()
+                    end
+                    if imgui.SliderInt("MIRA Y", variaveis.miraY, -100, 100) then
+                        verificarMudancasESalvar()
+                    end
                     imgui.Separator()
-                    imgui.SliderFloat(" TAMANHO", variaveis.miraTamanho, 2.0, 50.0)
-                    imgui.SliderFloat(" LARGURA", variaveis.miraLargura, 1.0, 10.0)
+                    if imgui.SliderFloat(" TAMANHO", variaveis.miraTamanho, 2.0, 50.0) then
+                        verificarMudancasESalvar()
+                    end
+                    if imgui.SliderFloat(" LARGURA", variaveis.miraLargura, 1.0, 10.0) then
+                        verificarMudancasESalvar()
+                    end
                     imgui.Spacing()
                     imgui.Separator()
                     imgui.Spacing()
-                    imgui.Checkbox("Ativar Borda", variaveis.miraBordaAtivada)
+                    if imgui.Checkbox("Ativar Borda", variaveis.miraBordaAtivada) then
+                        verificarMudancasESalvar()
+                    end
                     if variaveis.miraBordaAtivada[0] then
-                        imgui.SliderFloat("LARGURA BORDA", variaveis.miraTamanhoBorda, 0.5, 5.0)
+                        if imgui.SliderFloat("LARGURA BORDA", variaveis.miraTamanhoBorda, 0.5, 5.0) then
+                            verificarMudancasESalvar()
+                        end
                     end
                 end
             end
@@ -1931,9 +2063,13 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
             if imgui.CollapsingHeader("MODIFICADOR DE CLIMA/HORA", imgui.TreeNodeFlags.DefaultOpen) then
                 TextoCentralizado("Hora")
                 imgui.PushItemWidth(230)
-                imgui.SliderInt("##tempo", variaveis.tempoId, 0, 23)
+                if imgui.SliderInt("##tempo", variaveis.tempoId, 0, 23) then
+                    verificarMudancasESalvar()
+                end
                 TextoCentralizado("Clima")
-                imgui.SliderInt("##clima", variaveis.climaId, 0, 45)
+                if imgui.SliderInt("##clima", variaveis.climaId, 0, 45) then
+                    verificarMudancasESalvar()
+                end
                 imgui.PopItemWidth()
                 imgui.Spacing()
                 imgui.Separator()
@@ -1941,25 +2077,12 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
                 if variaveis.climaAtivo[0] then
                     if imgui.Button("DESATIVAR", imgui.ImVec2(190, 35)) then
                         variaveis.climaAtivo[0] = false
+                        verificarMudancasESalvar()
                     end
                 else
                     if imgui.Button("ATIVAR", imgui.ImVec2(190, 35)) then
                         variaveis.climaAtivo[0] = true
-                    end
-                end
-            end
-            imgui.Spacing()
-            imgui.Separator()
-            imgui.Spacing()
-            if imgui.CollapsingHeader("FAKE PC - by Shellder", imgui.TreeNodeFlags.DefaultOpen) then
-                imgui.Spacing()
-                if variaveis.fakePcAtivo[0] then
-                    if imgui.Button("DESATIVAR", imgui.ImVec2(190, 35)) then
-                        variaveis.fakePcAtivo[0] = false
-                    end
-                else
-                    if imgui.Button("ATIVAR", imgui.ImVec2(190, 35)) then
-                        variaveis.fakePcAtivo[0] = true
+                        verificarMudancasESalvar()
                     end
                 end
             end
@@ -1968,17 +2091,44 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
             imgui.Spacing()
             if imgui.CollapsingHeader("FOV CHANGER - by Shellder", imgui.TreeNodeFlags.DefaultOpen) then
                 imgui.Spacing()
-                imgui.Checkbox("ATIVAR FOV CHANGER", variaveis.fovAtivado)
+                if imgui.Checkbox("ATIVAR FOV CHANGER", variaveis.fovAtivado) then
+                    verificarMudancasESalvar()
+                end
                 if variaveis.fovAtivado[0] then
-                    imgui.SliderInt("FOV", variaveis.valorFov, 10, 135)
+                    if imgui.SliderInt("FOV", variaveis.valorFov, 10, 135) then
+                        verificarMudancasESalvar()
+                    end
                     if imgui.Button("RESETAR FOV", imgui.ImVec2(190, 35)) then
                         variaveis.valorFov[0] = 60
+                        verificarMudancasESalvar()
                     end
                 else
                     if imgui.Button("ATIVAR FOV CHANGER", imgui.ImVec2(190, 35)) then
                         variaveis.fovAtivado[0] = true
+                        verificarMudancasESalvar()
                     end
                 end
+            end
+            imgui.Spacing()
+            imgui.Separator()
+            imgui.Spacing()
+            if imgui.CollapsingHeader("SENSIBILIDADE E TELA", imgui.TreeNodeFlags.DefaultOpen) then
+                imgui.Spacing()
+                imgui.PushItemWidth(250)
+                TextoCentralizado("Sensibilidade")
+                if imgui.SliderFloat("##sens", variaveis.sensibilidade, 1, 100, "%.0f") then
+                    verificarMudancasESalvar()
+                end
+                TextoCentralizado("Fixed Zoom")
+                local zoomtext = variaveis.fixedZoom[0] == 0 and "off" or "%.1f"
+                if imgui.SliderFloat("##Zoom", variaveis.fixedZoom, 0, 5, zoomtext) then
+                    verificarMudancasESalvar()
+                end
+                TextoCentralizado("Render Distance")
+                if imgui.SliderFloat("##renderdist", variaveis.renderDistance, 50, 1200, "%.0f") then
+                    verificarMudancasESalvar()
+                end
+                imgui.PopItemWidth()
             end
             imgui.SameLine()
             if imgui.Button("D", imgui.ImVec2(35, 35)) then
@@ -2003,86 +2153,17 @@ imgui.OnFrame(function() return estado.modoEdicao[0] end, function()
     imgui.PopStyleColor(18) 
 end)
 
-function eventos.onSendClientJoin(c, d, e, f, g, h, i)
-    if config.fakePcAtivo then
-        h = estado.versaoFakePc
-        g = '3917818323CD3E248B7722EB5CBCED04CE5B4DBF67E'
-        local j = 1
-        return { c, j, e, f, g, h, i }
-    end
-    return nil
-end
-
-function eventos.onSendPlayerSync(k)
-    if config.fakePcAtivo then
-        if k.weapon == 44 or k.weapon == 45 or k.weapon == 46 then
-            k.weapon = 0
-        end
-        if k.leftRightKeys ~= 0 and k.leftRightKeys ~= 128 and k.leftRightKeys ~= 65408 then
-            if k.leftRightKeys > 0 then
-                k.leftRightKeys = 128
-            else
-                k.leftRightKeys = 65408
-            end
-        end
-        if k.upDownKeys ~= 0 and k.upDownKeys ~= 128 and k.upDownKeys ~= 65408 then
-            if k.upDownKeys > 0 then
-                k.upDownKeys = 128
-            else
-                k.upDownKeys = 65408
-            end
-        end
-        if k.upDownKeys == 65408 or k.keysData == 4 then
-            k.animationId = 0
-        end
-        if k.specialAction ~= nil and k.specialAction ~= 0 and k.specialAction ~= 1 then
-            k.specialAction = 0
-        end
-    end
-    return k
-end
-
-function eventos.onSendVehicleSync(k)
-    if config.fakePcAtivo then
-        if k.leftRightKeys ~= 0 and k.leftRightKeys ~= 128 and k.leftRightKeys ~= 65408 then
-            if k.leftRightKeys > 0 then
-                k.leftRightKeys = 128
-            else
-                k.leftRightKeys = 65408
-            end
-        end
-    end
-    return k
-end
-
-function eventos.onSendPassengerSync(k)
-    if config.fakePcAtivo then
-        if k.leftRightKeys ~= 0 and k.leftRightKeys ~= 128 and k.leftRightKeys ~= 65408 then
-            if k.leftRightKeys > 0 then
-                k.leftRightKeys = 128
-            else
-                k.leftRightKeys = 65408
-            end
-        end
-    end
-    return k
-end
-
-function simularSyncDesocupado()
-    local m = os.clock()
-    if m - estado.ultimoTempoSyncDesocupado > 5 then
-        estado.ultimoTempoSyncDesocupado = m
-    end
-end
-
 function main()
     carregarConfig()
     while not isSampAvailable() do 
         wait(0) 
     end
+    
     sampRegisterChatCommand("shell", function()
         estado.modoEdicao[0] = not estado.modoEdicao[0]
+        salvarConfig()
     end)
+    
     while true do
         wait(0)
         if isSampAvailable() then
@@ -2091,15 +2172,53 @@ function main()
             if hp then estado.vida = math.min(100, hp) end
             if ar then estado.colete = math.min(100, ar) end
             estado.dinheiro = getPlayerMoney(PLAYER_HANDLE) or 0
+            
             if config.climaAtivo then
                 setTimeOfDay(config.tempoId, 0)
                 forceWeatherNow(config.climaId)
             end
-            if config.fakePcAtivo then
-                simularSyncDesocupado()
-            end
+            
             if config.fovAtivado then
                 cameraSetLerpFov(config.valorFov, 101.0, 1000, true)
+            end
+            
+            aplicarSensibilidade(config.sensibilidade)
+            setCameraRenderDistance(config.renderDistance)
+            setCameraZoom(config.fixedZoom)
+            
+            if config.valorFov ~= 70 then
+                estado.fovAtivo = true
+            else
+                estado.fovAtivo = false
+            end
+            
+            if estado.fovAtivo then
+                if isCurrentCharWeapon(PLAYER_PED, 34) and isCharPlayingAnim(PLAYER_PED, "gun_stand") then
+                    if isWidgetPressed(WIDGET_ZOOM_IN) then
+                        estado.zoomLevel = estado.zoomLevel + 6
+                        if estado.zoomLevel > 10 + config.valorFov then
+                            estado.zoomLevel = 10 + config.valorFov
+                        end
+                    elseif isWidgetPressed(WIDGET_ZOOM_OUT) then
+                        estado.zoomLevel = estado.zoomLevel - 4.5
+                        if estado.zoomLevel < 0 then
+                            estado.zoomLevel = 0
+                        end
+                    end
+                    cameraSetLerpFov(config.valorFov - estado.zoomLevel, config.valorFov - estado.zoomLevel, 1000, true)
+                else
+                    local fovr = estado.zoomLevel / 10
+                    estado.zoomLevel = estado.zoomLevel - fovr
+                    if estado.zoomLevel < 0 then
+                        estado.zoomLevel = 0
+                    end
+                    cameraSetLerpFov(config.valorFov - estado.zoomLevel, config.valorFov - estado.zoomLevel, 1000, true)
+                end
+            end
+            
+            if os.clock() - estado.ultimoSalvamento > 5 then
+                salvarConfig()
+                estado.ultimoSalvamento = os.clock()
             end
         end
     end
