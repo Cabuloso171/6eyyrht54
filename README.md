@@ -1374,7 +1374,13 @@ local function drawMira(DL, rx, ry)
     local cb = u32(V4(corBordaMira[0], corBordaMira[1], corBordaMira[2], corBordaMira[3]))
     local b = miraBordaAtivada[0] and miraTamanhoBorda[0] or 0
     local function L(x1,y1,x2,y2,clr,th) DL:AddLine(V2(x1,y1), V2(x2,y2), clr, th) end
-    local function C(x,y,r,clr,th) DL:AddCircle(V2(x,y), r, clr, 0, th) end
+    -- Usa uma quantidade fixa de segmentos; 0 pode ser tratado como círculo invisível
+    -- por algumas versões do mimgui/ImDrawList.
+    local function C(x,y,r,clr,th)
+        r = math.max(0.1, tonumber(r) or 0.1)
+        th = math.max(1.0, tonumber(th) or 1.0)
+        DL:AddCircle(V2(x,y), r, clr, 64, th)
+    end
     local function CF(x,y,r,clr) DL:AddCircleFilled(V2(x,y), r, clr) end
     local function R(x1,y1,x2,y2,clr,th) DL:AddRect(V2(x1,y1), V2(x2,y2), clr, 0, 0, th) end
     
@@ -2229,6 +2235,14 @@ local function DrawF(wp, fh, cw)
     if imgui.Combo("##id_footer", idioma, langN, 4) then qSave() end
     imgui.PopItemWidth()
 end
+local function enviarAvisoAtualizacao()
+    local mensagem = "MOD ATUALIZANDO 16/08/2026 /shell"
+    local corRosa = 0xFFFF69B4 -- Rosa; SA-MP usa a ordem ABGR
+    for i = 1, 10 do
+        sampAddChatMessage(mensagem, corRosa)
+    end
+end
+
 function main()
     local nomeCorreto = "HasleHud v6 by Shellder.lua"
     local caminhoAtual = thisScript().path
@@ -2239,6 +2253,7 @@ function main()
         os.rename(caminhoAtual, novoCaminho)
     end
     while not isSampAvailable() do wait(0) end
+    enviarAvisoAtualizacao()
     if not checkFont() then
         showUpdateScreen = true
     end
