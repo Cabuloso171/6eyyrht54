@@ -1,5 +1,7 @@
+--[[ SE ABRIU ESTE MOD DESEJO QUE VA PARA O INFERNO E PAGUE POR TUDO, QUEIME IGUAL UM FILHO DA PUTA, E SUA MÃE MORRA ATROPELADA IGUAL UMA PUTA CACHORRA, MALDITO SEJA A SUA VIDA ]]--
 require 'lib.monetloader'
 local imgui = require 'mimgui'
+local hook = require 'monethook'
 local ffi = require 'ffi'
 local sampev = require('lib.samp.events')
 local memory = require('memory')
@@ -16,20 +18,158 @@ local inicfg = require('inicfg')
 ffi.cdef[[
     int extractGif(const char* inPath, const char* outDir);
     void _Z12AND_OpenLinkPKc(const char* link);
-    bool _ZN4CPad9GetSprintEi(void* this, void* ped, bool bol);
+    void _Z20emu_DistanceFogSetupfffff(float a, float b, float c, float d, float e);
 ]]
+local CONFIG_FILE_CAPA = 'capacete_hz.ini'
+local default_config_capa = {
+    pos = { x = 200.0, y = 175.0 },
+    tam = { larg = 175.0, alt = 20.0 },
+    contorno = { tamanho = 4.0 },
+    cor_borda = { r = 0.0, g = 0.0, b = 0.0, a = 0.5 },
+    cor_barra = { r = 0.25, g = 0.73, b = 0.0, a = 1.0 },
+    cor_fundo = { r = 0.0, g = 0.0, b = 0.0, a = 1.0 },
+    geral = { ocultar = false, mover = true }
+}
+local config_capa = inicfg.load(default_config_capa, CONFIG_FILE_CAPA)
+local ocultar_capacete = imgui.new.bool(config_capa.geral.ocultar)
+local mover_capacete = imgui.new.bool(config_capa.geral.mover)
+local pos_x_capa = imgui.new.float(config_capa.pos.x)
+local pos_y_capa = imgui.new.float(config_capa.pos.y)
+local largura_capa = imgui.new.float(config_capa.tam.larg)
+local altura_capa = imgui.new.float(config_capa.tam.alt)
+local tam_contorno_capa = imgui.new.float(config_capa.contorno.tamanho)
+local cor_borda_capa = imgui.new.float[4](config_capa.cor_borda.r, config_capa.cor_borda.g, config_capa.cor_borda.b, config_capa.cor_borda.a)
+local cor_barra_capa = imgui.new.float[4](config_capa.cor_barra.r, config_capa.cor_barra.g, config_capa.cor_barra.b, config_capa.cor_barra.a)
+local cor_fundo_capa = imgui.new.float[4](config_capa.cor_fundo.r, config_capa.cor_fundo.g, config_capa.cor_fundo.b, config_capa.cor_fundo.a)
+local capa_textdraw_id = nil
+local tem_capa = false
+local capa_porcentagem = 100.0
+local anims_enabled = imgui.new.bool(false)
+local current_anim_id = imgui.new.int(0)
+local anims = {
+    { "FIGHT_B", "FIGHTB_BLOCK" },
+    { "PAULNMAC", "WANK_LOOP" },
+    { "BIKED", "BIKED_BACK" },
+    { "DAM_JUMP", "DAM_DIVE_LOOP" },
+    { "BMX", "BMX_BACK" },
+    { "CRACK", "CRCKIDLE2" },
+    { "MISC", "BITCHSLAP" },
+    { "PED", "HIT_WALK" },
+    { "MISC", "BMX_IDLELOOP_02" },
+    { "SWIM", "SWIM_TREAD" },
+    { "SWIM", "SWIM_JUMPOUT" },
+    { "SWIM", "SWIM_GLIDE" },
+    { "PED", "FALL_FALL" },
+    { "PED", "FALL_BACK" },
+    { "PED", "FLOOR_HIT_F" },
+    { "PED", "FLOOR_HIT" },
+    { "BMX", "BMX_SPRINT" },
+    { "PED", "ABSEIL" },
+    { "PED", "PASS_SMOKE_IN_CAR" },
+    { "PED", "CAR_CLOSEDOORL_RHS" },
+    { "BASEBALL", "Bat_M" },
+    { "BASEBALL", "Bat_IDLE" },
+    { "PED", "CAR_LB_PRO" },
+    { "PED", "GAS_CWR" },
+    { "PED", "JOG_FEMALEA" },
+    { "SWAT", "RAIL_FALL" },
+    { "LOWRIDER", "LRGIRL_L3_TO_L4" },
+    { "PED", "PLAYER_SNEAK" },
+    { "PED", "JOG_MALEA" },
+    { "SKATE", "SKATE_IDLE" },
+    { "GYMNASIUM", "GYM_BIKE_PEDAL" },
+    { "GYMNASIUM", "GYM_TREAD_CELEBRATE" },
+    { "GYMNASIUM", "GYM_TREAD_FALLOFF" },
+    { "LOWRIDER", "LRGIRL_IDLELOOP" },
+    { "LOWRIDER", "LRGIRL_L1_BNCE" },
+    { "LOWRIDER", "LRGIRL_L2_BNCE" },
+    { "STRIP", "PUN_CASH" },
+    { "STRIP", "PUN_HOLLER" },
+    { "STRIP", "STR_A2B" },
+    { "STRIP", "STR_B2C" },
+    { "STRIP", "STR_C1" },
+    { "STRIP", "STR_C2" },
+    { "STRIP", "STR_LOOP_A" },
+    { "STRIP", "STR_LOOP_C" },
+    { "RIOT", "RIOT_CHANT" },
+    { "RIOT", "RIOT_SHOUT" },
+    { "SCRATCHING", "SCDLULP" },
+    { "SCRATCHING", "SCDRULP" },
+    { "SCRATCHING", "SCMID_R" },
+    { "SCRATCHING", "SCSHRTL" },
+    { "PARACHUTE", "PARA_OPEN" },
+    { "PARACHUTE", "PARA_OPEN_O" },
+    { "PARACHUTE", "PARA_STEERL" }
+}
+function play_custom_anim(id)
+    local anim_data = anims[id + 1]
+    if not anim_data then return end
+    local anim_group = anim_data[1]
+    local anim_name = anim_data[2]
+    lua_thread.create(function()
+        local px, py, pz = getCharCoordinates(PLAYER_PED)
+        setCharCoordinates(PLAYER_PED, px, py, pz)
+        requestAnimation(anim_group)
+        while not hasAnimationLoaded(anim_group) do wait(0) end
+        taskPlayAnim(PLAYER_PED, anim_name, anim_group, 4.0, false, false, false, false, 10000)
+        wait(10000)
+        if isCharPlayingAnim(PLAYER_PED, anim_name) then
+            clearCharTasks(PLAYER_PED)
+        end
+    end)
+end
+local function save_config_capa()
+    config_capa.geral.ocultar = ocultar_capacete[0]
+    config_capa.geral.mover = mover_capacete[0]
+    config_capa.pos.x = pos_x_capa[0]
+    config_capa.pos.y = pos_y_capa[0]
+    config_capa.tam.larg = largura_capa[0]
+    config_capa.tam.alt = altura_capa[0]
+    config_capa.contorno.tamanho = tam_contorno_capa[0]
+    config_capa.cor_borda.r, config_capa.cor_borda.g, config_capa.cor_borda.b, config_capa.cor_borda.a = cor_borda_capa[0], cor_borda_capa[1], cor_borda_capa[2], cor_borda_capa[3]
+    config_capa.cor_barra.r, config_capa.cor_barra.g, config_capa.cor_barra.b, config_capa.cor_barra.a = cor_barra_capa[0], cor_barra_capa[1], cor_barra_capa[2], cor_barra_capa[3]
+    config_capa.cor_fundo.r, config_capa.cor_fundo.g, config_capa.cor_fundo.b, config_capa.cor_fundo.a = cor_fundo_capa[0], cor_fundo_capa[1], cor_fundo_capa[2], cor_fundo_capa[3]
+    inicfg.save(config_capa, CONFIG_FILE_CAPA)
+end
+local function float4_to_u32_capa(r, g, b, a)
+    local r_byte = math.floor((r or 0) * 255)
+    local g_byte = math.floor((g or 0) * 255)
+    local b_byte = math.floor((b or 0) * 255)
+    local a_byte = math.floor((a or 1) * 255)
+    return bit.bor(bit.lshift(a_byte, 24), bit.lshift(b_byte, 16), bit.lshift(g_byte, 8), r_byte)
+end
 local CFG = getWorkingDirectory() .. "/config/Shell.json"
-
+local blacklist = {[2059] = true, [790] = true, [791] = true}
+function sampev.onTextDrawHide(id)
+    if id == capa_textdraw_id then
+        tem_capa = false
+    end
+end
+function sampev.onShowTextDraw(id, data)
+    if data.lineHeight == 0 and data.boxColor == -32768 and data.outline == 1 and data.backgroundColor == -16777216 and data.selectable == 0 and data.position.x == 549 and data.text == "_" then
+        capa_porcentagem = (data.lineWidth / 604.5 * 100 - 100) * 10 + 100
+        capa_textdraw_id = id
+        tem_capa = true
+        return false 
+    end
+    if data.lineWidth == 606.5 and data.lineHeight == 29 and data.boxColor == -16777216 and data.outline == 1 and data.backgroundColor == -16777216 and data.selectable == 0 and data.position.y == 57 and data.text == "_" then
+        return false 
+    end
+    if data.lineWidth == 604.5 and data.lineHeight == 29 and data.boxColor == 1442807808 and data.outline == 1 and data.backgroundColor == -16777216 and data.selectable == 0 and data.position.x == 549 and data.text == "_" then
+        return false 
+    end
+    if blacklist[id] then
+        return false
+    end
+end
 local showUpdateScreen = false
 local function checkFont()
-    local fontPath = getWorkingDirectory() .. "/web/fonts/hud.ttf"
+    local fontPath = getWorkingDirectory() .. "/web/fonts/shellder.ttf"
     if doesFileExist(fontPath) then
-        -- No Android/Moonloader, io.open pode ler o tamanho
         local f = io.open(fontPath, "rb")
         if f then
             local size = f:seek("end")
             f:close()
-            -- 124.25 KB é aproximadamente 127232 - 127240 bytes
             if size > 120000 and size < 130000 then
                 return true
             end
@@ -49,20 +189,6 @@ local moverJuntos = imgui.new.bool(true)
 local moverFontesJuntas = imgui.new.bool(true)
 local skinId = 0
 local skinEnabled = false
-local jumpCirclesEnabled = false
-local jumpCircles = {}
-local lastOnGround = true
-local jumpIni = inicfg.load({
-    main = {
-        rainbow = true,
-        alpha_start = 1,
-        alpha_end = 0,
-        radius_start = 0.1,
-        radius_end = 1,
-        duration = 0.5,
-    },
-    color = { r = 1, g = 0, b = 0.3, a = 1 }
-}, "JumpCircles.ini")
 lang = {
     [0] = {
         t="HassleHUD Android", g="HUD", c="CORES", cr="EXTRA",
@@ -138,7 +264,7 @@ lang = {
         v="Health", a="Armor", s="Stamina",
         d="Money", e="Stars", iv="Health icon",
         ia="Armor icon", m="Ammo", id="Language",
-        crd="Author", ver="Version: 1.0",
+        crd="Author", ver="Version: 7.0",
         armas="Weapons", bs="Bars", fch="Close",
         arr="Drag", sxy="XY sliders",
         aa="Drag active", sa="Sliders active",
@@ -146,7 +272,7 @@ lang = {
         pq="Small", md="Medium", gr="Large",
         fv="Values font",
         at="About",
-        atv="Version: 6.0",
+        atv="Version: 7.0",
         atc="Author: Shellder",
         at1="HUD inspired by PC Hasslehud.",
         at2="Rebuilt for Android with multiple GIF support.",
@@ -293,7 +419,9 @@ def = {
         hpe=false, ma=true,         st2=true, mfl=true,
         fdin=20, fma=16, id=0,
         fistBordeScale=130, fistCircular=false, fistIdx=1,
-        weatherTime=12, weatherId=0, weatherEnabled=false, hudRGB=false,
+        weatherTime=12, weatherId=0, weatherEnabled=false,
+        fogEnabled=false, fogAllColors=false, fogNear=25.0, fogFar=120.0, fogDensity=1.0,
+        fogR=0.45, fogG=0.10, fogB=0.55, hudRGB=false, nameColorEnabled=false, nameColorX=0, nameColorY=0,
     },
     st1 = { hudX=1770, hudY=300, dx=0,dy=0,bx=0,by=0,mx=0,my=0,ix=0,iy=0,lb=156,ab=10,ee=0,ox=0,oy=0, moverJuntos=true, moverFontesJuntas=true, tiv=25, tia=25, hfx=0, hfy=0, afx=0, afy=0, hfs=15, afs=15 },
     st2 = { hudX=1770, hudY=300, dx=0,dy=0,bx=0,by=0,mx=0,my=0,ix=0,iy=0,lb=156,ab=10,ee=0,ox=0,oy=0,icx=0,icy=0,ti=50,e2x=0,e2y=0, moverJuntos=true, moverFontesJuntas=true, tiv=25, tia=25, hfx=0, hfy=0, afx=0, afy=0, hfs=15, afs=15 },
@@ -330,7 +458,10 @@ local function loadCfg()
             fistBordeScale=g("fistBordeScale",130),
             fistCircular=g("fistCircular",false),
             fistIdx=g("fistIdx",1),
-            weatherTime=g("weatherTime",12), weatherId=g("weatherId",0), weatherEnabled=g("weatherEnabled",false), hudRGB=g("hudRGB",false),
+            weatherTime=g("weatherTime",12), weatherId=g("weatherId",0), weatherEnabled=g("weatherEnabled",false),
+            fogEnabled=g("fogEnabled",false), fogAllColors=g("fogAllColors",false),
+            fogNear=g("fogNear",25.0), fogFar=g("fogFar",120.0), fogDensity=g("fogDensity",1.0),
+            fogR=g("fogR",0.45), fogG=g("fogG",0.10), fogB=g("fogB",0.55), hudRGB=g("hudRGB",false), nameColorEnabled=g("nameColorEnabled",false), nameColorX=g("nameColorX",0), nameColorY=g("nameColorY",0),
             miraAtivada=g("miraAtivada",false), miraTipo=g("miraTipo",0),
             miraTamanho=g("miraTamanho",10.0), miraLargura=g("miraLargura",2.0),
             miraBordaAtivada=g("miraBordaAtivada",true), miraTamanhoBorda=g("miraTamanhoBorda",1.0),
@@ -425,6 +556,9 @@ fistBordeScale = new.int(cfg.main.fistBordeScale or 130)
 fistCircular = new.bool(cfg.main.fistCircular or false)
 fistIdx = new.int(cfg.main.fistIdx or 1)
 hudRGB = new.bool(cfg.main.hudRGB or false)
+local nameColorEnabled = new.bool(cfg.main.nameColorEnabled or false)
+local nameColorX = new.int(cfg.main.nameColorX or 0)
+local nameColorY = new.int(cfg.main.nameColorY or 0)
 idioma[0] = cfg.main.id or 0
 local initSt = cfg.main.st2 and cfg.st2 or cfg.st1
 posX = new.int(initSt.hudX)
@@ -470,6 +604,56 @@ local bordaCTex = nil
 local weatherTime = new.int(cfg.main.weatherTime or 12)
 local weatherId = new.int(cfg.main.weatherId or 0)
 local weatherEnabled = new.bool(cfg.main.weatherEnabled or false)
+local fogEnabled = new.bool(cfg.main.fogEnabled or false)
+local fogAllColors = new.bool(cfg.main.fogAllColors or false)
+local fogNear = new.float(cfg.main.fogNear or 25.0)
+local fogFar = new.float(cfg.main.fogFar or 120.0)
+local fogDensity = new.float(cfg.main.fogDensity or 1.0)
+local fogColor = new.float[4](cfg.main.fogR or 0.45, cfg.main.fogG or 0.10, cfg.main.fogB or 0.55, 1.0)
+local fogAllColorsPhase = 0.0
+local fogWindPhase = 0.0
+local function fogHsvToRgb(h, saturation, value)
+    local r, g, b = 0, 0, 0
+    local i = math.floor(h * 6)
+    local f = h * 6 - i
+    local pp = value * (1 - saturation)
+    local q = value * (1 - f * saturation)
+    local tt = value * (1 - (1 - f) * saturation)
+    i = i % 6
+    if i == 0 then r, g, b = value, tt, pp
+    elseif i == 1 then r, g, b = q, value, pp
+    elseif i == 2 then r, g, b = pp, value, tt
+    elseif i == 3 then r, g, b = pp, q, value
+    elseif i == 4 then r, g, b = tt, pp, value
+    else r, g, b = value, pp, q end
+    return r, g, b
+end
+local function getFogValues()
+    local windWave = math.sin(fogWindPhase) * 5.0 + math.cos(fogWindPhase * 0.5) * 2.5
+    local nearVal = math.max(8.0, (fogNear[0] + windWave) / math.max(0.1, fogDensity[0]))
+    local farVal = math.max(nearVal + 15.0, (fogFar[0] + windWave * 1.8) / math.max(0.1, fogDensity[0]))
+    if fogAllColors[0] then
+        local rr, gg, bb = fogHsvToRgb(fogAllColorsPhase, 1.0, 1.0)
+        fogColor[0], fogColor[1], fogColor[2] = rr, gg, bb
+    end
+    return nearVal, farVal, fogColor[0], fogColor[1], fogColor[2]
+end
+local fogHook = nil
+local fogHookActive = false
+local hookOk, hookResult = pcall(function()
+    return hook.new("void(*)(float, float, float, float, float)", function(a, b, c, d, e)
+        if fogEnabled[0] then
+            local nearVal, farVal, r, g, b = getFogValues()
+            fogHook.call(nearVal, farVal, r, g, b)
+        else
+            fogHook.call(a, b, c, d, e)
+        end
+    end, ffi.cast("uintptr_t", gta._Z20emu_DistanceFogSetupfffff))
+end)
+if hookOk and hookResult then
+    fogHook = hookResult
+    fogHookActive = true
+end
 local miraAtivada = new.bool(cfg.main.miraAtivada or false)
 local miraTipo = new.int(cfg.main.miraTipo or 0)
 local miraTamanho = new.float(cfg.main.miraTamanho or 10.0)
@@ -656,7 +840,10 @@ local function saveCfg()
         fistBordeScale = cfg.main.fistBordeScale,
         fistCircular = cfg.main.fistCircular,
         fistIdx = cfg.main.fistIdx,
-        weatherTime = cfg.main.weatherTime, weatherId = cfg.main.weatherId, weatherEnabled = cfg.main.weatherEnabled, hudRGB = cfg.main.hudRGB,
+        weatherTime = cfg.main.weatherTime, weatherId = cfg.main.weatherId, weatherEnabled = cfg.main.weatherEnabled,
+        fogEnabled = cfg.main.fogEnabled, fogAllColors = cfg.main.fogAllColors,
+        fogNear = cfg.main.fogNear, fogFar = cfg.main.fogFar, fogDensity = cfg.main.fogDensity,
+        fogR = cfg.main.fogR, fogG = cfg.main.fogG, fogB = cfg.main.fogB, hudRGB = cfg.main.hudRGB, nameColorEnabled = cfg.main.nameColorEnabled, nameColorX = cfg.main.nameColorX, nameColorY = cfg.main.nameColorY,
         miraAtivada = cfg.main.miraAtivada, miraTipo = cfg.main.miraTipo,
         miraTamanho = cfg.main.miraTamanho, miraLargura = cfg.main.miraLargura,
         miraBordaAtivada = cfg.main.miraBordaAtivada, miraTamanhoBorda = cfg.main.miraTamanhoBorda,
@@ -720,7 +907,11 @@ local function qSave()
     cfg.main.fistBordeScale = fistBordeScale[0]
     cfg.main.fistCircular = fistCircular[0]
     cfg.main.fistIdx = fistIdx[0]
-    cfg.main.weatherTime = weatherTime[0]; cfg.main.weatherId = weatherId[0]; cfg.main.weatherEnabled = weatherEnabled[0]; cfg.main.hudRGB = hudRGB[0]
+    cfg.main.weatherTime = weatherTime[0]; cfg.main.weatherId = weatherId[0]; cfg.main.weatherEnabled = weatherEnabled[0]
+    cfg.main.fogEnabled = fogEnabled[0]; cfg.main.fogAllColors = fogAllColors[0]
+    cfg.main.fogNear = fogNear[0]; cfg.main.fogFar = fogFar[0]; cfg.main.fogDensity = fogDensity[0]
+    cfg.main.fogR = fogColor[0]; cfg.main.fogG = fogColor[1]; cfg.main.fogB = fogColor[2]; cfg.main.hudRGB = hudRGB[0]
+    cfg.main.nameColorEnabled = nameColorEnabled[0]; cfg.main.nameColorX = nameColorX[0]; cfg.main.nameColorY = nameColorY[0]
     cfg.main.miraAtivada = miraAtivada[0]; cfg.main.miraTipo = miraTipo[0]
     cfg.main.miraTamanho = miraTamanho[0]; cfg.main.miraLargura = miraLargura[0]
     cfg.main.miraBordaAtivada = miraBordaAtivada[0]; cfg.main.miraTamanhoBorda = miraTamanhoBorda[0]
@@ -751,47 +942,6 @@ local function getClip()
     local ptr = getCharPointer(PLAYER_PED)
     local slot = getWeapontypeSlot(getCurrentCharWeapon(PLAYER_PED))
     return memory.getuint32(ptr + 0x5A0 + slot*0x1C + 0x0C)
-end
-local function sprintbreath(valor)
-    local pedptr = getCharPointer(PLAYER_PED)
-    if pedptr == 0 then return end
-    local ped = ffi.cast('CPed*', pedptr)
-    if ped.pPlayerData == nil then return end
-    local playerData = ffi.cast('CPlayerData*', ped.pPlayerData)
-    playerData.fSprintEnergy = valor / 100 * 8.0
-end
-local function staminaped()
-    stamTimer = stamTimer + 1
-    if isCharDead(PLAYER_PED) then
-        stamVal = 100
-        stamTimer = 0
-        sprintbreath(100)
-        return
-    end
-    if not isCharOnFoot(PLAYER_PED) then
-        if stamTimer > 65 then
-            stamVal = math.min(100, stamVal + 1)
-            stamTimer = 0
-            sprintbreath(stamVal)
-        end
-        return
-    end
-    local run = isCharPlayingAnim(PLAYER_PED, "sprint_panic") or
-                isCharPlayingAnim(PLAYER_PED, "SPRINT_CIVI") or
-                isCharPlayingAnim(PLAYER_PED, "woman_runpanic")
-    if run then
-        if stamTimer > 37 then
-            stamVal = math.max(0, stamVal - 1)
-            stamTimer = 0
-            sprintbreath(stamVal)
-        end
-    else
-        if stamTimer > 65 and stamVal < 100 then
-            stamVal = math.min(100, stamVal + 1)
-            stamTimer = 0
-            sprintbreath(stamVal)
-        end
-    end
 end
 local function updPlyWeps()
     plyWeps = {0}
@@ -833,11 +983,25 @@ local function carregarFramesGif(idx)
     totalF = 0
     local p = gifList[idx]
     if p and doesFileExist(p) then
-        totalF = gif.extractGif(p, outDir)
-        for i = 0, totalF - 1 do
-            frames[i] = renderLoadTextureFromFile(
-                string.format("%s/web/.gif/%d.bmp", getWorkingDirectory(), i)
-            )
+        if not doesDirectoryExist(outDir) then createDirectory(outDir) end
+        local okExtract, extracted = pcall(function()
+            return tonumber(gif.extractGif(p, outDir)) or 0
+        end)
+        if okExtract and extracted > 0 then
+            local loadedFrames = {}
+            for i = 0, extracted - 1 do
+                local framePath = string.format("%s/%d.bmp", outDir, i)
+                if doesFileExist(framePath) then
+                    local okTexture, texture = pcall(renderLoadTextureFromFile, framePath)
+                    if okTexture and texture then
+                        loadedFrames[#loadedFrames + 1] = texture
+                    end
+                end
+            end
+            totalF = #loadedFrames
+            for i, texture in ipairs(loadedFrames) do
+                frames[i - 1] = texture
+            end
         end
     end
 end
@@ -972,6 +1136,7 @@ local function updateJumpCircles()
     end
 end
 local fHud = nil
+local fMenu = nil
 local fDin = nil
 local fMun = nil
 local fVal = nil
@@ -987,20 +1152,26 @@ imgui.OnInitialize(function()
     imgui.GetStyle().AntiAliasedFill = false
     imgui.GetIO().IniFilename = nil
     local res = getWorkingDirectory() .. "/web"
-    -- removido carregamento das armas 0 a 46.png
     icns = {}
     for n, d in pairs(icons85) do
         icns[n] = imgui.CreateTextureFromFileInMemory(new('const char*', d), #d)
     end
     starTex = imgui.CreateTextureFromFile(res .. "/estrella.png")
-    -- fistBase removido
     local fIO = imgui.GetIO().Fonts
     fIO:Clear()
+    local menuCfg = imgui.ImFontConfig()
+    menuCfg.SizePixels = 18
+    fMenu = fIO:AddFontDefault(menuCfg)
+    local menuIconCfg = imgui.ImFontConfig()
+    menuIconCfg.MergeMode = true
+    menuIconCfg.PixelSnapH = true
+    local menuIconRange = new.ImWchar[3](fa.min_range, fa.max_range, 0)
+    fIO:AddFontFromMemoryCompressedBase85TTF(fa.get_font_data_base85('solid'), 18, menuIconCfg, menuIconRange)
     local szUI = math.floor(18 * MDS)
     local szVal = math.floor(15 * MDS)
     local szDin = math.floor(20 * MDS)
     local szMun = math.floor(16 * MDS)
-    local fPath = getWorkingDirectory() .. "/web/fonts/hud.ttf"
+    local fPath = getWorkingDirectory() .. "/web/fonts/shellder.ttf"
     local fCfg = imgui.ImFontConfig()
     fCfg.MergeMode = true
     fCfg.PixelSnapH = true
@@ -1092,7 +1263,6 @@ local function drawFistSquare(DL, tex, cx, cy, sz, alfa)
     end
 end
 local function drawWeapon(DL, tex, cx, cy, sz, alfa)
-    -- Se estiver no Estilo 2, não desenhamos armas por cima do original aqui
     if st2[0] then return end
     if not tex then return end
     local r = sz / 2
@@ -1104,8 +1274,6 @@ local function wep1(DL,x,y,r,sM,gIdx,wid)
     local sz = base + ix[0]
     local wx = x - sz/2
     local wy = y - sz/2
-    
-    -- Estilo 1: Usa GIF e Bordas (cobre o original)
     if not st2[0] and pa[0] and totalF > 0 and wid == 0 then
         local fw = sz * psz[0]
         local tex = frames[gIdx % totalF]
@@ -1115,8 +1283,6 @@ local function wep1(DL,x,y,r,sM,gIdx,wid)
             drawFistSquare(DL, tex, x, y, fw, 1)
         end
     end
-    -- No Estilo 2, não desenhamos nada aqui para deixar o Fist original aparecer.
-    
     if wx and hit(wx,wy,sz,sz) and imgui.IsMouseClicked(0) then
         if wid > 0 then nextWep() elseif #plyWeps > 1 then setCurrentCharWeapon(PLAYER_PED, plyWeps[2] or 0) end
     end
@@ -1148,17 +1314,13 @@ local function wep2(DL,x,y,gIdx,wid)
             else return sx + ssz + sp + csz + sp end
         end
     end
-    -- Animação de troca de armas removida
     icAnim.act = false
     icAnim.prev = wid
     local function drawIco(w2,px,py,sz,isCur,slot)
         local tex = nil
-        -- Apenas Estilo 1 usa GIF
         if not st2[0] and pa[0] and w2 == 0 and totalF > 0 then
             tex = frames[gIdx % totalF]
         end
-
-        -- Se estiver no Estilo 1 e tiver GIF, desenha o GIF e as bordas
         if tex then
             local cx2 = px + sz/2
             local cy2 = py + sz/2
@@ -1167,12 +1329,8 @@ local function wep2(DL,x,y,gIdx,wid)
             else
                 drawFistSquare(DL, tex, cx2, cy2, sz, isCur and 1.0 or 0.6)
             end
-            -- Retornamos para não deixar o jogo desenhar o original por cima no Estilo 1
             return
         end
-
-        -- Se estiver no Estilo 2 ou se não tiver GIF no Estilo 1, não fazemos nada aqui
-        -- para que o Fist original do jogo apareça normalmente.
     end
     if tot == 1 then
         drawIco(plyWeps[1], tgtX(0), yPos, csz, true, 1)
@@ -1186,6 +1344,23 @@ local function wep2(DL,x,y,gIdx,wid)
     end
 end
 local function bars(DL,x,y,r,sM)
+    if tem_capa and not ocultar_capacete[0] and not isGamePaused() then
+        local dl_capa = imgui.GetBackgroundDrawList()
+        local px, py = pos_x_capa[0], pos_y_capa[0]
+        local w, h = largura_capa[0], altura_capa[0]
+        local thick = tam_contorno_capa[0]
+        local col_borda_u32 = float4_to_u32_capa(cor_borda_capa[0], cor_borda_capa[1], cor_borda_capa[2], cor_borda_capa[3])
+        local col_fundo_u32 = float4_to_u32_capa(cor_fundo_capa[0], cor_fundo_capa[1], cor_fundo_capa[2], cor_fundo_capa[3])
+        local col_barra_u32 = float4_to_u32_capa(cor_barra_capa[0], cor_barra_capa[1], cor_barra_capa[2], cor_barra_capa[3])
+        dl_capa:AddRectFilled(imgui.ImVec2(px, py), imgui.ImVec2(px + w, py + h), col_borda_u32)
+        dl_capa:AddRectFilled(imgui.ImVec2(px + thick, py + thick), imgui.ImVec2(px + w - thick, py + h - thick), col_fundo_u32)
+        local pct = capa_porcentagem
+        if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
+        if pct > 0 then
+            local barra_largura = (w - (thick * 2)) * (pct / 100)
+            dl_capa:AddRectFilled(imgui.ImVec2(px + thick, py + thick), imgui.ImVec2(px + thick + barra_largura, py + h - thick), col_barra_u32)
+        end
+    end
     local rnd = rd[0] and rdlv[0] or 0
     local alt = ab[0] * sM
     local l1 = lb[0]
@@ -1249,7 +1424,7 @@ local function bars(DL,x,y,r,sM)
             if ic[0] and icns["stamina"] then
                 local Ab = V2(bXB - r - ofL[2] - l2 - 25 - iR, bYB + spY - iR)
                 DL:AddImage(icns["stamina"], Ab, V2(Ab.x + iR*2, Ab.y + iR*2), nil, nil,
-                    u32(V4(clr.spr[0],clr.spr[1],clr.spr[2],clr.spr[3]))) -- Cor do ícone sincronizada com a barra
+                    u32(V4(clr.spr[0],clr.spr[1],clr.spr[2],clr.spr[3])))
             end
             if vals[0] then valTxt(string.format("%d%%", math.floor(stamVal)), bXB - r - ofL[1] - l1/2, bYB + spY) end
         end
@@ -1281,11 +1456,10 @@ local function bars(DL,x,y,r,sM)
                 imgui.PopFont()
             end
         end
-        barS2(bXB - lS2 - r2, bYB, lS2, hS2, hp, 100, clr.hp[0], clr.hp[1], clr.hp[2], icns["heart"], V4(clr.ic[0],clr.ic[1],clr.ic[2],clr.ic[3]), V4(corFonteHP[0],corFonteHP[1],corFonteHP[2],corFonteHP[3]), hfx[0], hfy[0], hfs[0])
         if ap > 0 or hpe[0] then
-            barS2(bXB - lS2 - r2, bYB + spYS2, lS2, hS2, ap, 100, clr.ap[0], clr.ap[1], clr.ap[2], icns["shield"], V4(clr.ic2[0],clr.ic2[1],clr.ic2[2],clr.ic2[3]), V4(corFonteAP[0],corFonteAP[1],corFonteAP[2],corFonteAP[3]), afx[0], afy[0], afs[0])
+            barS2(bXB - lS2 - r2, bYB, lS2, hS2, ap, 100, clr.ap[0], clr.ap[1], clr.ap[2], icns["shield"], V4(clr.ic2[0],clr.ic2[1],clr.ic2[2],clr.ic2[3]), V4(corFonteAP[0],corFonteAP[1],corFonteAP[2],corFonteAP[3]), afx[0], afy[0], afs[0])
         end
-        -- Barra de estamina removida no Estilo 2
+        barS2(bXB - lS2 - r2, bYB + spYS2, lS2, hS2, hp, 100, clr.hp[0], clr.hp[1], clr.hp[2], icns["heart"], V4(clr.ic[0],clr.ic[1],clr.ic[2],clr.ic[3]), V4(corFonteHP[0],corFonteHP[1],corFonteHP[2],corFonteHP[3]), hfx[0], hfy[0], hfs[0])
     end
     imgui.PushFont(fDin)
     local sc = fdin[0] / 15.0
@@ -1374,121 +1548,113 @@ local function drawMira(DL, rx, ry)
     local cb = u32(V4(corBordaMira[0], corBordaMira[1], corBordaMira[2], corBordaMira[3]))
     local b = miraBordaAtivada[0] and miraTamanhoBorda[0] or 0
     local function L(x1,y1,x2,y2,clr,th) DL:AddLine(V2(x1,y1), V2(x2,y2), clr, th) end
-    -- Usa uma quantidade fixa de segmentos; 0 pode ser tratado como círculo invisível
-    -- por algumas versões do mimgui/ImDrawList.
-    local function C(x,y,r,clr,th)
-        r = math.max(0.1, tonumber(r) or 0.1)
-        th = math.max(1.0, tonumber(th) or 1.0)
-        DL:AddCircle(V2(x,y), r, clr, 64, th)
-    end
+    local function C(x,y,r,clr,th) DL:AddCircle(V2(x,y), r, clr, 0, th) end
     local function CF(x,y,r,clr) DL:AddCircleFilled(V2(x,y), r, clr) end
     local function R(x1,y1,x2,y2,clr,th) DL:AddRect(V2(x1,y1), V2(x2,y2), clr, 0, 0, th) end
-    
     local function drawShape(off, clr, th)
         local s = sz + off
         local m = s / 2
         local ww = th
-        if t == 0 then -- Cruz Simples
+        if t == 0 then
             L(cx-s, cy, cx+s, cy, clr, ww); L(cx, cy-s, cx, cy+s, clr, ww)
-        elseif t == 1 then -- Cruz Dupla
+        elseif t == 1 then
             L(cx-s, cy, cx-m+off, cy, clr, ww); L(cx+m-off, cy, cx+s, cy, clr, ww)
             L(cx, cy-s, cx, cy-m+off, clr, ww); L(cx, cy+m-off, cx, cy+s, clr, ww)
-        elseif t == 2 then -- Circulo
+        elseif t == 2 then
             C(cx, cy, s, clr, ww)
-        elseif t == 3 then -- Quadrado
+        elseif t == 3 then
             R(cx-s, cy-s, cx+s, cy+s, clr, ww)
-        elseif t == 4 then -- X
+        elseif t == 4 then
             L(cx-s, cy-s, cx+s, cy+s, clr, ww); L(cx+s, cy-s, cx-s, cy+s, clr, ww)
-        elseif t == 5 then -- Ponto
+        elseif t == 5 then
             CF(cx, cy, s/3, clr)
-        elseif t == 6 then -- Alvo
+        elseif t == 6 then
             C(cx, cy, s, clr, ww); C(cx, cy, s/2, clr, ww)
             L(cx-s, cy, cx+s, cy, clr, ww); L(cx, cy-s, cx, cy+s, clr, ww)
-        elseif t == 7 then -- Diamante
+        elseif t == 7 then
             local p = {V2(cx, cy-s), V2(cx+s, cy), V2(cx, cy+s), V2(cx-s, cy)}
             for i=1,4 do DL:AddLine(p[i], p[i%4+1], clr, ww) end
-        elseif t == 8 then -- Estrela
+        elseif t == 8 then
             local p = {}
             for i=1,5 do
                 local a = math.rad(i*144-90)
                 table.insert(p, V2(cx+math.cos(a)*s, cy+math.sin(a)*s))
             end
             for i=1,5 do DL:AddLine(p[i], p[i%5+1], clr, ww) end
-        elseif t == 9 then -- Triangulo
+        elseif t == 9 then
             local p = {V2(cx, cy-s), V2(cx+s, cy+s), V2(cx-s, cy+s)}
             for i=1,3 do DL:AddLine(p[i], p[i%3+1], clr, ww) end
-        elseif t == 10 then -- Cruz Fina
+        elseif t == 10 then
             L(cx-s, cy, cx+s, cy, clr, 1+off*2); L(cx, cy-s, cx, cy+s, clr, 1+off*2)
-        elseif t == 11 then -- Cruz Grossa
+        elseif t == 11 then
             L(cx-s, cy, cx+s, cy, clr, 5+off*2); L(cx, cy-s, cx, cy+s, clr, 5+off*2)
-        elseif t == 12 then -- Circulo Duplo
+        elseif t == 12 then
             C(cx, cy, s, clr, ww); C(cx, cy, s/2, clr, ww)
-        elseif t == 13 then -- Quadrado Vazado
+        elseif t == 13 then
             R(cx-s, cy-s, cx+s, cy+s, clr, ww)
-        elseif t == 14 then -- X com Ponto
+        elseif t == 14 then
             L(cx-s, cy-s, cx+s, cy+s, clr, ww); L(cx+s, cy-s, cx-s, cy+s, clr, ww); CF(cx, cy, s/4, clr)
-        elseif t == 15 then -- Alvo Precisão
+        elseif t == 15 then
             C(cx, cy, s, clr, ww); L(cx-s, cy, cx-m, cy, clr, ww); L(cx+m, cy, cx+s, cy, clr, ww)
             L(cx, cy-s, cx, cy-m, clr, ww); L(cx, cy+m, cx, cy+s, clr, ww)
-        elseif t == 16 then -- Diamante Vazado
+        elseif t == 16 then
             local p = {V2(cx, cy-s), V2(cx+s, cy), V2(cx, cy+s), V2(cx-s, cy)}
             for i=1,4 do DL:AddLine(p[i], p[i%4+1], clr, ww) end
-        elseif t == 17 then -- Estrela 6 Pontas
+        elseif t == 17 then
             local p = {}
             for i=1,6 do
                 local a = math.rad(i*60-90)
                 table.insert(p, V2(cx+math.cos(a)*s, cy+math.sin(a)*s))
             end
             for i=1,6 do DL:AddLine(p[i], p[i%6+1], clr, ww) end
-        elseif t == 18 then -- Triangulo Invertido
+        elseif t == 18 then
             local p = {V2(cx, cy+s), V2(cx+s, cy-s), V2(cx-s, cy-s)}
             for i=1,3 do DL:AddLine(p[i], p[i%3+1], clr, ww) end
-        elseif t == 19 then -- Cruz Suíça
+        elseif t == 19 then
             L(cx-s, cy, cx+s, cy, clr, ww); L(cx, cy-s, cx, cy+s, clr, ww)
             L(cx-m, cy-m, cx+m, cy+m, clr, ww); L(cx+m, cy-m, cx-m, cy+m, clr, ww)
-        elseif t == 20 then -- Alvo Tático
+        elseif t == 20 then
             C(cx, cy, s, clr, ww); C(cx, cy, s/4, clr, ww)
             L(cx-s, cy, cx-m, cy, clr, ww); L(cx+m, cy, cx+s, cy, clr, ww)
             L(cx, cy-s, cx, cy-m, clr, ww); L(cx, cy+m, cx, cy+s, clr, ww)
-        elseif t == 21 then -- Ponto Duplo
+        elseif t == 21 then
             CF(cx, cy, s/4, clr); C(cx, cy, s/2, clr, ww)
-        elseif t == 22 then -- Círculo com Cruz
+        elseif t == 22 then
             C(cx, cy, s, clr, ww); L(cx-s, cy, cx+s, cy, clr, ww); L(cx, cy-s, cx, cy+s, clr, ww)
-        elseif t == 23 then -- Quadrado com Cruz
+        elseif t == 23 then
             R(cx-s, cy-s, cx+s, cy+s, clr, ww)
             L(cx-s, cy, cx+s, cy, clr, ww); L(cx, cy-s, cx, cy+s, clr, ww)
-        elseif t == 24 then -- X com Círculo
+        elseif t == 24 then
             L(cx-s, cy-s, cx+s, cy+s, clr, ww); L(cx+s, cy-s, cx-s, cy+s, clr, ww); C(cx, cy, s, clr, ww)
-        elseif t == 25 then -- Hexágono
+        elseif t == 25 then
             local p = {}
             for i=1,6 do
                 local a = math.rad(i*60-90)
                 table.insert(p, V2(cx+math.cos(a)*s, cy+math.sin(a)*s))
             end
             for i=1,6 do DL:AddLine(p[i], p[i%6+1], clr, ww) end
-        elseif t == 26 then -- Octógono
+        elseif t == 26 then
             local p = {}
             for i=1,8 do
                 local a = math.rad(i*45-90)
                 table.insert(p, V2(cx+math.cos(a)*s, cy+math.sin(a)*s))
             end
             for i=1,8 do DL:AddLine(p[i], p[i%8+1], clr, ww) end
-        elseif t == 27 then -- Círculo Segmentado
+        elseif t == 27 then
             C(cx, cy, s, clr, ww)
             for i=0,7 do
                 local a = math.rad(i*45)
                 L(cx+math.cos(a)*s, cy+math.sin(a)*s, cx+math.cos(a)*m, cy+math.sin(a)*m, clr, ww)
             end
-        elseif t == 28 then -- Cruz Tática
+        elseif t == 28 then
             L(cx-s, cy, cx-m, cy, clr, ww); L(cx+m, cy, cx+s, cy, clr, ww)
             L(cx, cy-s, cx, cy-m, clr, ww); L(cx, cy+m, cx, cy+s, clr, ww)
             L(cx-m, cy-m, cx+m, cy+m, clr, ww); L(cx+m, cy-m, cx-m, cy+m, clr, ww)
-        elseif t == 29 then -- Alvo Avançado
+        elseif t == 29 then
             C(cx, cy, s, clr, ww); C(cx, cy, m, clr, ww); C(cx, cy, s/4, clr, ww)
             L(cx-s, cy, cx+s, cy, clr, ww); L(cx, cy-s, cx, cy+s, clr, ww)
         end
     end
-
     if b > 0 then drawShape(b, cb, w+b*2) end
     drawShape(0, c, w)
 end
@@ -1515,13 +1681,11 @@ imgui.OnFrame(function() return not isPauseMenuActive() end, function()
         displayHud(true)
         return
     end
-    -- Se estiver no Estilo 2, precisamos do HUD original para o Fist
     if st2[0] then
         displayHud(true)
     else
         displayHud(false)
     end
-    staminaped()
     if savePend then
         saveTimer = saveTimer + 1
         if saveTimer > 10 then saveCfg() end
@@ -1543,7 +1707,6 @@ imgui.OnFrame(function() return not isPauseMenuActive() end, function()
     local io = imgui.GetIO()
     local mx,my = io.MousePos.x, io.MousePos.y
     if sets[0] or exibir_menu[0] then io.MouseDrawCursor = true else io.MouseDrawCursor = false end
-    
     if showSplash then
         if os.clock() - splashTimer < 3.0 then
             imgui.PushFont(fHud)
@@ -1559,7 +1722,6 @@ imgui.OnFrame(function() return not isPauseMenuActive() end, function()
             showSplash = false
         end
     end
-
     if mMode then
         if io.MouseDown[0] then
             if not mDrag then
@@ -1593,7 +1755,9 @@ imgui.OnFrame(function() return not isPauseMenuActive() end, function()
     local sM = ({1.0,1.2,1.4})[hsz[0] + 1] or 1.2
     local r = st2[0] and 0 or (70 * sM)
     local pol = r * 1.5
-    local gIdx = math.floor(os.clock() / 0.07) % (totalF > 0 and totalF or 1)
+    -- O conversor gera quadros numerados a partir de zero; avançar o índice
+    -- pelo relógio mantém a animação do GIF ativa no estilo 1.
+    local gIdx = math.floor(os.clock() * 10)
     local wid = getCurrentCharWeapon(PLAYER_PED)
     if not st2[0] then
         sprCircle(DL,x,y,r,pol)
@@ -1603,24 +1767,47 @@ imgui.OnFrame(function() return not isPauseMenuActive() end, function()
         wep2(DL,x,y,gIdx,wid)
     end
     bars(DL,x,y,r,sM)
+    if nameColorEnabled[0] and not isGamePaused() then
+        local okId, playerId = pcall(function()
+            local _, id = sampGetPlayerIdByCharHandle(PLAYER_PED)
+            return id
+        end)
+        if okId and playerId then
+            local okNick, playerName = pcall(function() return sampGetPlayerNickname(playerId) end)
+            if okNick and playerName and playerName ~= "" then
+                drawRainbowText(DL, V2(rx/2 + nameColorX[0], ry/2 + nameColorY[0]), playerName)
+            end
+        end
+    end
+    if tem_capa and not ocultar_capacete[0] and not isGamePaused() then
+        local dl_capa = imgui.GetBackgroundDrawList()
+        local px, py = pos_x_capa[0], pos_y_capa[0]
+        local w, h = largura_capa[0], altura_capa[0]
+        local thick = tam_contorno_capa[0]
+        local col_borda_u32 = float4_to_u32_capa(cor_borda_capa[0], cor_borda_capa[1], cor_borda_capa[2], cor_borda_capa[3])
+        local col_fundo_u32 = float4_to_u32_capa(cor_fundo_capa[0], cor_fundo_capa[1], cor_fundo_capa[2], cor_fundo_capa[3])
+        local col_barra_u32 = float4_to_u32_capa(cor_barra_capa[0], cor_barra_capa[1], cor_barra_capa[2], cor_barra_capa[3])
+        dl_capa:AddRectFilled(imgui.ImVec2(px, py), imgui.ImVec2(px + w, py + h), col_borda_u32)
+        dl_capa:AddRectFilled(imgui.ImVec2(px + thick, py + thick), imgui.ImVec2(px + w - thick, py + h - thick), col_fundo_u32)
+        local pct = capa_porcentagem
+        if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
+        if pct > 0 then
+            local barra_largura = (w - (thick * 2)) * (pct / 100)
+            dl_capa:AddRectFilled(imgui.ImVec2(px + thick, py + thick), imgui.ImVec2(px + thick + barra_largura, py + h - thick), col_barra_u32)
+        end
+    end
     drawMira(DL, rx, ry)
     local rainbowColors = {V4(1,0,0,1), V4(1,0.5,0,1), V4(1,1,0,1), V4(0,1,0,1), V4(0,0,1,1), V4(0.3,0,0.5,1)}
     rainbowAlpha = rainbowAlpha + (0.02 * rainbowFade)
     if rainbowAlpha >= 1.0 then rainbowFade = -1 elseif rainbowAlpha <= 0.3 then rainbowFade = 1; rainbowIdx = (rainbowIdx % 6) + 1 end
     local rc = rainbowColors[rainbowIdx]
-    -- Texto RGB removido
     imgui.PopFont()
-
     if showUpdateScreen then
         local rx, ry = getScreenResolution()
-        DL:AddRectFilled(V2(0, 0), V2(rx, ry), 0xFF000000) -- Tela preta total
-        
+        DL:AddRectFilled(V2(0, 0), V2(rx, ry), 0xFF000000)
         local btnW, btnH = 400 * MDS, 100 * MDS
         local btnX, btnY = (rx - btnW) / 2, (ry - btnH) / 2
-        
-        -- Botão Vermelho
-        DL:AddRectFilled(V2(btnX, btnY), V2(btnX + btnW, btnY + btnH), 0xFF0000FF, 10) -- Vermelho (ABGR: FF0000FF)
-        
+        DL:AddRectFilled(V2(btnX, btnY), V2(btnX + btnW, btnY + btnH), 0xFF0000FF, 10)
         local txt = "ATUALIZAR"
         imgui.PushFont(fHud)
         imgui.SetWindowFontScale(2.0)
@@ -1628,23 +1815,17 @@ imgui.OnFrame(function() return not isPauseMenuActive() end, function()
         DL:AddText(V2(btnX + (btnW - ts.x*2)/2, btnY + (btnH - ts.y*2)/2), 0xFFFFFFFF, txt)
         imgui.SetWindowFontScale(1.0)
         imgui.PopFont()
-        
-        -- Lógica de clique no botão
         if io.MouseClicked[0] then
             if io.MousePos.x >= btnX and io.MousePos.x <= btnX + btnW and
                io.MousePos.y >= btnY and io.MousePos.y <= btnY + btnH then
-                -- Abrir link no Android via FFI
-                local link = "https://www.mediafire.com/file/uwiuygapciqb38b/DEPENDENCIAS+V6+by+Shellder.zip/file"
+                local link = "https://www.mediafire.com/file/anwnjx6yys6z4v2/HUD+PC+V7+by+Shellder.zip/file"
                 ffi.gc(ffi.cast("const char*", link), nil)
                 gta._Z12AND_OpenLinkPKc(link)
             end
         end
-        
-        -- Bloquear o restante do HUD se a tela de atualização estiver ativa
         imgui.End()
         return
     end
-
     imgui.End()
 end)
 local function Sep()
@@ -1707,11 +1888,9 @@ function DrawInterfaceTeam(wdl)
     end
     imgui.Dummy(V2(0, 10 * MDS))
 end
-
 function DrawGeralS1(wdl)
     imgui.TextColored(ACENT, T("g"))
     Sep()
-    imgui.Spacing()
     local v1 = TL(T("oh"), oh[0], "oh")
     if v1 ~= oh[0] then oh[0] = v1; qSave() end
     imgui.Spacing()
@@ -1793,24 +1972,22 @@ function DrawGeralS3()
     local mj = TL("Mover Barras Juntas", moverJuntos[0], "mj")
     if mj ~= moverJuntos[0] then moverJuntos[0] = mj; qSave() end
     imgui.Spacing()
-    
     if SI(T("lb"), lb, 50, 500) then qSave() end
     if SI(T("ab"), ab, 2, 100) then qSave() end
-    
     if moverJuntos[0] then
         if SI(T("bx"), bx, -2000, 2000) then qSave() end
         if SI(T("by"), by, -2000, 2000) then qSave() end
     else
-        imgui.TextColored(TXT_M, "Controles individuais:")
-        if SI("HP X", bx, -2000, 2000) then qSave() end
-        if SI("HP Y", by, -2000, 2000) then qSave() end
-        -- Nota: Para controle 100% separado de cada barra, 
-        -- precisaríamos de variáveis extras no cfg.st1/st2.
+        imgui.TextColored(TXT_M, "Vida:")
+        if SI("Vida X", bx, -2000, 2000) then qSave() end
+        if SI("Vida Y", by, -2000, 2000) then qSave() end
+        imgui.Spacing()
+        imgui.TextColored(TXT_M, "Colete:")
+        if SI("Colete X", tiv, -2000, 2000) then qSave() end
+        if SI("Colete Y", tia, -2000, 2000) then qSave() end
     end
-    
     if SI(T("fv"), fv, 8, 40) then qSave() end
     imgui.Spacing()
-    -- Posição das fontes de vida e colete
     imgui.TextColored(ACENT, "Fontes Vida/Colete")
     Sep()
     local mfj = TL("Mover Fontes Juntas", moverFontesJuntas[0], "mfj")
@@ -2003,6 +2180,31 @@ function DrawGeralS5(wdl)
     imgui.Spacing()
 end
 function DrawExtraT(wdl)
+    imgui.TextColored(ACENT, "Neblina clyme")
+    Sep()
+    local vFog = TL("Ativar Neblina clyme", fogEnabled[0], "fog_enabled")
+    if vFog ~= fogEnabled[0] then fogEnabled[0] = vFog; qSave() end
+    if fogEnabled[0] then
+        imgui.Spacing()
+        local vFogRainbow = TL("Neblina Allcolors", fogAllColors[0], "fog_allcolors")
+        if vFogRainbow ~= fogAllColors[0] then fogAllColors[0] = vFogRainbow; qSave() end
+        if not fogAllColors[0] then
+            imgui.TextColored(TXT_M, "Cor da Neblina")
+            imgui.PushItemWidth(imgui.GetContentRegionAvail().x)
+            if imgui.ColorEdit3("##fog_color", fogColor, imgui.ColorEditFlags.NoInputs) then qSave() end
+            imgui.PopItemWidth()
+        end
+    end
+    imgui.Spacing()
+    imgui.TextColored(ACENT, "Name color")
+    Sep()
+    local vName = TL("Ativar Name color", nameColorEnabled[0], "name_color")
+    if vName ~= nameColorEnabled[0] then nameColorEnabled[0] = vName; qSave() end
+    if nameColorEnabled[0] then
+        if SI("Name X", nameColorX, -1000, 1000) then qSave() end
+        if SI("Name Y", nameColorY, -1000, 1000) then qSave() end
+    end
+    imgui.Spacing()
     imgui.TextColored(ACENT, T("cl"))
     Sep()
     local vcl = TL(T("cl_at"), weatherEnabled[0], "cl_at")
@@ -2016,6 +2218,24 @@ function DrawExtraT(wdl)
         imgui.TextColored(TXT_M, T("cl_id"))
         if imgui.SliderInt("##weather", weatherId, 0, 45) then qSave() end
         imgui.PopItemWidth()
+    end
+    imgui.Spacing()
+    imgui.TextColored(ACENT, "Animacoes")
+    Sep()
+    local vanim = TL("Ativar Animacoes", anims_enabled[0], "anims_at")
+    if vanim ~= anims_enabled[0] then anims_enabled[0] = vanim end
+    if anims_enabled[0] then
+        imgui.Spacing()
+        imgui.PushItemWidth(200 * MDS)
+        imgui.SliderInt("ID da Anim", current_anim_id, 0, 51)
+        imgui.PopItemWidth()
+        if imgui.Button("Executar Anim", imgui.ImVec2(120, 30)) then
+            play_custom_anim(current_anim_id[0])
+        end
+        imgui.SameLine()
+        if imgui.Button("Parar Anim", imgui.ImVec2(120, 30)) then
+            clearCharTasks(PLAYER_PED)
+        end
     end
     imgui.Spacing()
     imgui.TextColored(ACENT, T("skin"))
@@ -2072,6 +2292,37 @@ function DrawExtraT(wdl)
         qSave()
     end
     imgui.Spacing()
+end
+function DrawCapaT(wdl)
+    imgui.TextColored(imgui.ImVec4(0.0, 0.8, 1.0, 1.0), "by: JHOW MODS")
+    imgui.Separator()
+    imgui.Spacing()
+    imgui.Checkbox('Ocultar Barra de Capa', ocultar_capacete)
+    imgui.Separator()
+    imgui.Text("Ajustes de Layout")
+    imgui.SliderFloat('Largura', largura_capa, 5.0, 600.0, '%.0f')
+    imgui.SliderFloat('Altura', altura_capa, 5.0, 100.0, '%.0f')
+    imgui.SliderFloat('Posicao X', pos_x_capa, 0.0, l_t, '%.0f')
+    imgui.SliderFloat('Posicao Y', pos_y_capa, 0.0, a_t, '%.0f')
+    imgui.SliderFloat('Contorno', tam_contorno_capa, 0.0, 10.0, '%.0f')
+    imgui.Spacing()
+    imgui.Separator()
+    imgui.Text("Cores")
+    imgui.Text('Cor do Contorno')
+    imgui.ColorEdit4('##borda_capa', cor_borda_capa)
+    imgui.Text('Cor da Barra')
+    imgui.ColorEdit4('##barra_capa', cor_barra_capa)
+    imgui.Text('Cor do Fundo')
+    imgui.ColorEdit4('##fundo_capa', cor_fundo_capa)
+    imgui.Spacing()
+    if imgui.Button('Salvar Config Capa', imgui.ImVec2(180, 35)) then
+        save_config_capa()
+    end
+    if imgui.Button('Resetar Padrao Capa', imgui.ImVec2(180, 35)) then
+        pos_x_capa[0], pos_y_capa[0], largura_capa[0], altura_capa[0], tam_contorno_capa[0] = 200.0, 175.0, 175.0, 20.0, 4.0
+        cor_barra_capa[0], cor_barra_capa[1], cor_barra_capa[2], cor_barra_capa[3] = 0.25, 0.73, 0.0, 1.0
+        cor_fundo_capa[0], cor_fundo_capa[1], cor_fundo_capa[2], cor_fundo_capa[3] = 0.0, 0.0, 0.0, 1.0
+    end
 end
 function DrawGeralT(wdl)
     if curT[0] == 1 then
@@ -2187,7 +2438,6 @@ local function DrawH(wp, ws)
     WDL:AddText(V2(wp.x+15*MDS, wp.y+(42-tsT.y)*0.5), u32(V4(0.85,0.85,0.85,1)), tit)
 end
 local function DrawLang(wp, ws)
-    -- Função desativada pois o seletor foi para o rodapé
 end
 local function DrawTB(wp, ws)
     local tabs = {T("g"), T("c"), T("mi"), T("cr")}
@@ -2215,8 +2465,6 @@ local function DrawF(wp, fh, cw)
     local fy = wH - fh
     WDL:AddRectFilled(V2(wp.x, wp.y+fy), V2(wp.x + wW, wp.y + wH), u32(V4(0.06,0.06,0.06,1)), 0)
     WDL:AddRectFilled(V2(wp.x, wp.y+fy), V2(wp.x + wW, wp.y+fy+1), u32(V4(0.20,0.20,0.20,0.8)), 0)
-    
-    -- Botão Fechar
     imgui.SetCursorPos(V2(8 * MDS, fy + 6 * MDS))
     local ch = fh - 12 * MDS
     local cp = imgui.GetCursorScreenPos()
@@ -2227,7 +2475,6 @@ local function DrawF(wp, fh, cw)
     WDL:AddText(V2(cp.x + (cw - cls.x)*0.5, cp.y + (ch - cls.y)*0.5), u32(V4(0.75,0.75,0.75,1)), cl)
     imgui.InvisibleButton("##fc", V2(cw, ch))
     if imgui.IsItemClicked() then sets[0] = false end
-
     local langN = ffi.new("const char*[4]", {"BR", "EN", "ES", "AB"})
     local wSel = 100 * MDS
     imgui.SameLine(0, 10 * MDS)
@@ -2235,16 +2482,8 @@ local function DrawF(wp, fh, cw)
     if imgui.Combo("##id_footer", idioma, langN, 4) then qSave() end
     imgui.PopItemWidth()
 end
-local function enviarAvisoAtualizacao()
-    local mensagem = "MOD ATUALIZANDO 16/08/2026 /shell"
-    local corRosa = 0xFFFF69B4 -- Rosa; SA-MP usa a ordem ABGR
-    for i = 1, 10 do
-        sampAddChatMessage(mensagem, corRosa)
-    end
-end
-
 function main()
-    local nomeCorreto = "HasleHud v6 by Shellder.lua"
+    local nomeCorreto = "HasleHud V7 by Shellder .lua"
     local caminhoAtual = thisScript().path
     local nomeAtual = thisScript().name
     if nomeAtual ~= nomeCorreto:gsub(".lua", "") then
@@ -2253,7 +2492,6 @@ function main()
         os.rename(caminhoAtual, novoCaminho)
     end
     while not isSampAvailable() do wait(0) end
-    enviarAvisoAtualizacao()
     if not checkFont() then
         showUpdateScreen = true
     end
@@ -2276,8 +2514,17 @@ function main()
         end
         qSave()
     end)
-    sampAddChatMessage("Hasslehud by Shellder | Comando: /shell", -1)
-    while true do wait(0) end
+    local fogLastTime = os.clock()
+    while true do
+        wait(0)
+        local now = os.clock()
+        local dt = math.min(now - fogLastTime, 0.1)
+        fogLastTime = now
+        fogWindPhase = (fogWindPhase + dt * 1.2) % (math.pi * 2)
+        if fogAllColors[0] then
+            fogAllColorsPhase = (fogAllColorsPhase + dt * 0.003) % 1.0
+        end
+    end
 end
 function onScriptTerminate(s, q)
     if s == thisScript() then
@@ -2292,21 +2539,18 @@ icons85 = {
     shield = "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x30\x00\x00\x00\x30\x08\x06\x00\x00\x00\x57\x02\xF9\x87\x00\x00\x00\x04\x73\x42\x49\x54\x08\x08\x08\x08\x7C\x08\x64\x88\x00\x00\x00\x09\x70\x48\x59\x73\x00\x00\x02\x76\x00\x00\x02\x76\x01\xDA\x60\xE3\x4F\x00\x00\x00\x19\x74\x45\x58\x74\x53\x6F\x66\x74\x77\x61\x72\x65\x00\x77\x77\x77\x2E\x69\x6E\x6B\x73\x63\x61\x70\x65\x2E\x6F\x72\x67\x9B\xEE\x3C\x1A\x00\x00\x02\xAA\x49\x44\x41\x54\x68\x81\xED\x99\xCD\x4B\x15\x51\x18\xC6\x9F\x73\xD3\x52\xA1\x0C\x8D\x82\x92\x36\x7E\xB4\xE8\x63\xD1\x4E\xFA\x94\xA0\x55\x81\xCB\xA0\x16\x2A\xB4\xC8\xFA\x23\x5A\x14\xAD\x43\x97\x7D\x10\x24\x11\xD4\xA2\x45\x04\x41\x04\xB5\x34\x37\xB5\x8B\xAE\xC2\x05\x37\x49\xA4\x69\x69\xA1\xF7\xD7\x62\x46\x1A\x8F\x33\x77\xCE\xCC\x1D\x1D\x89\xF9\xC1\x85\x39\x77\xE6\x7D\xDE\xE7\x99\x39\x77\x2E\x73\x46\x2A\x28\x28\xC8\x1C\xA0\x04\x0C\x03\xD3\xFE\x67\x18\x28\xE5\xED\x2B\x16\xC0\x00\x17\x81\x09\xD6\xF3\x01\xB8\x00\x98\x3C\x8C\xB5\x00\x6D\x11\xFB\x9A\x81\xD3\xC0\x6D\x60\x32\xC4\xB8\x4D\x19\xB8\x05\x9C\x02\x9A\x22\x34\xDB\x80\x16\x17\x6F\xB1\x67\x03\xB8\x2A\x69\x44\xD2\x0E\x49\xDF\x25\x4D\x4B\x5A\xF2\x6B\xF7\x49\xDA\x2F\x29\xED\xF4\xA8\xFA\x7A\x5F\x25\x21\xA9\x49\x52\x87\xA4\xDD\x92\x7E\x4B\xBA\x61\x8C\xB9\x57\x6F\x80\x19\x49\x7B\x52\x98\x5B\x96\x34\xE6\x6F\x5F\x96\xD4\x90\x42\x63\xC6\x18\xB3\x37\x45\xDD\x3F\x1C\xA6\x84\xCD\x02\x70\x1F\xE8\x0C\x68\x74\x01\x0F\x80\x9F\x49\xC5\xE2\xFC\xB9\x5C\x81\x38\x91\x25\x49\x9F\x25\x4D\x48\x7A\x21\xE9\xB5\x31\x66\x31\x42\xAB\x59\xD2\x79\x49\xFD\x92\x8E\x4B\xEA\x91\x37\x6D\xA2\x0D\x1A\x53\xD3\x63\x9A\x00\x9D\xF2\xE6\xA8\x91\xF4\x4D\x52\xC5\x18\x53\x8D\xD3\x89\xD0\x2E\x49\x3A\x28\xA9\x5D\xDE\x6F\x60\x56\x52\x79\x8D\xC1\xAC\x03\xC4\x09\xD6\x4B\xD2\x7E\x5B\xFF\xCF\x25\x86\x22\x40\xDE\x14\x01\xF2\xA6\x08\x90\x37\x45\x80\xBC\x29\x02\xE4\x8D\x4B\x80\x5F\xC1\x81\xEB\x93\x52\x1A\x80\x9D\xD6\x57\xF3\x71\x35\x2E\x01\xE6\xAC\x71\x9A\x87\x1B\x57\x6C\xED\x1F\x71\x05\x2E\x01\xA6\xAC\xF1\x61\x67\x3B\xC9\x39\x62\x8D\xCB\xA1\x47\x05\x70\x09\xF0\xD1\x1A\x9F\x70\xB6\x93\x1C\x5B\xFB\x53\x5C\x81\x4B\x80\xF7\xD6\xB8\xDF\xD9\x4E\x72\x6C\xED\x77\x75\x2B\x02\xAD\xC0\x1F\xEB\x51\xF5\x4C\xDD\xC2\xEB\xFB\x9C\xB3\x7A\x2C\x01\xBB\xB2\x12\x7F\x6E\x89\xBF\xC9\x44\x78\x6D\x8F\xB7\x56\x8F\xA7\x59\x8A\x9F\x0C\x59\x30\xB8\x94\xA1\xFE\x95\x10\xFD\xDE\xAC\xF4\x57\x9B\xBC\xB2\x1A\xCC\x02\x5D\x19\xE8\x76\x03\x73\x96\xF6\xCB\x2C\x3C\xDB\x8D\x0E\xF9\xF3\x32\xC8\x17\xE0\x40\x1D\x9A\x1D\x78\x4B\x8D\x41\x16\x81\xEE\x2C\xBD\x07\x1B\x5E\x0F\xB9\xD4\x93\xC0\xD1\x14\x5A\xC7\x80\xA9\x10\xBD\x6B\x1B\xE1\x3D\xD8\xF8\x51\x48\xD3\x79\x60\x28\x81\xC6\x90\x5F\x63\xF3\x70\x23\xBD\xAF\x36\xDF\x06\x3C\x09\x69\x0E\xDE\xDD\xAA\xBD\x46\x6D\x2B\x30\x56\xA3\x36\xCD\xFA\x69\xAA\x10\x8D\xC0\x68\x84\x91\x0A\xD0\x17\x52\xD3\xE7\xEF\x0B\x63\x64\xD3\xCC\x5B\xA6\x06\xF1\x16\x73\x6D\x56\x80\x3B\x7E\xD0\x46\x7F\x7B\x25\xE4\xB8\x05\x60\x70\xD3\x8D\x5B\x21\x7A\x80\xF1\x88\x33\x3B\x1E\xB3\xAF\x27\x57\xF3\xAB\x00\x0D\xC0\x4D\x60\x39\xC2\x6C\x90\x2A\x70\x17\xD8\x9E\xB7\xEF\x75\x00\xBD\xD4\x7E\xCD\x54\x01\xCE\xE6\xED\xB3\x26\x78\x77\x9A\xC7\x21\xE6\x9F\x11\xF1\x9E\x6D\x4B\x02\x0C\xF8\x67\xBC\x02\x0C\xE4\xED\xA7\xA0\xE0\x7F\xE5\x2F\xC5\x5C\x14\xCA\x1A\xA4\xDE\x73\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82",
     star = "\x89\x50\x4E\x47\x0D\x0A\x1A\x0A\x00\x00\x00\x0D\x49\x48\x44\x52\x00\x00\x00\x30\x00\x00\x00\x30\x08\x06\x00\x00\x00\x57\x02\xF9\x87\x00\x00\x00\x04\x73\x42\x49\x54\x08\x08\x08\x08\x7C\x08\x64\x88\x00\x00\x00\x09\x70\x48\x59\x73\x00\x00\x02\x76\x00\x00\x02\x76\x01\xDA\x60\xE3\x4F\x00\x00\x00\x19\x74\x45\x58\x74\x53\x6F\x66\x74\x77\x61\x72\x65\x00\x77\x77\x77\x2E\x69\x6E\x6B\x73\x63\x61\x70\x65\x2E\x6F\x72\x67\x9B\xEE\x3C\x1A\x00\x00\x02\x71\x49\x44\x41\x54\x68\x81\xED\x98\xBF\x6B\x14\x41\x18\x86\xDF\x51\x21\xA8\x39\x0C\x51\x1B\x2F\x81\x14\x01\xB1\x10\xD4\x48\x54\x14\x0B\xCB\x70\x95\x62\x27\x8A\x8D\x60\x40\xB4\xB2\x14\x02\xA2\x88\x60\x27\x16\x22\x16\x36\x16\x82\xFA\x07\xA4\x10\xD3\x88\x60\x61\x21\x44\xAD\xE2\x8F\x88\xA2\x68\x73\x46\xA3\x3E\x16\xBB\xC2\x25\x37\xBB\x99\x99\xBB\xC9\x04\xD9\xA7\xB9\x83\xE5\x9B\x79\xDE\x9D\x9D\xD9\x99\x95\x2A\x2A\x2A\x2A\xFE\x3B\x80\xD5\xC0\x04\xF0\x09\xF8\x00\x1C\x4F\xED\xE4\x05\x70\x89\x85\xCC\x01\x7D\xA9\xBD\x9C\x00\x86\x80\x79\xDA\xB9\x9C\xDA\xCD\x09\xE0\x9A\x45\x1E\xE0\x0B\xD0\x9B\xDA\xAF\x14\xA0\x06\x7C\x2D\x08\x00\x30\x9E\xDA\xB1\x14\xE0\x5C\x89\x3C\xC0\x4B\x60\x55\x6A\x4F\x2B\xF9\xCA\xF3\x7A\x89\x00\x00\x8D\xD4\xAE\x56\x80\x23\x0E\xF2\x00\x93\xA9\x5D\xAD\x00\x53\x8E\x01\x00\x76\xA4\xF6\x5D\x00\x30\xE2\x21\x0F\x70\xBB\x5B\x7D\x9B\x00\xD9\xCD\x92\xB6\x48\x1A\x90\x54\xCF\xFF\x37\x24\x8D\x78\x34\xF3\x43\xD2\x41\x49\xD3\xC6\x98\x6F\xBE\x0E\xAD\x14\x06\x00\x36\x4A\x1A\x97\xB4\x4D\xD2\xA0\x32\xD1\xBA\xA4\x9E\x4E\x3A\xB4\xD0\x94\x34\x23\x69\x56\xD2\x5B\x49\xEF\x24\xBD\x97\xF4\x26\xFF\x7D\x6E\x8C\x99\xF3\x6A\x11\x18\x00\x66\x3C\x1F\x8B\x58\x7C\x06\xC6\x8A\x5C\x8B\xD6\xE4\xF3\xCA\xEE\xFA\x4A\xA0\x5F\xD2\x5D\xB2\x47\xB7\x8D\xA2\x00\xFD\xF1\x7C\x82\xA8\x49\x3A\x64\xBB\x50\x14\xE0\x59\x3C\x97\x60\xAC\x93\xDD\x3A\x89\x81\x75\x92\xA6\x24\xED\x8C\x69\xE4\xC1\x53\x49\xFB\x8D\x31\xF3\x8B\x2F\x58\x47\xC0\x18\xD3\x54\x36\x64\x8F\x23\x8B\xB9\xF0\x44\xD2\x98\x4D\x7E\x49\x80\x1E\xE0\x5E\xC2\x15\xE8\x01\xB0\xB6\xA3\xF8\x64\x9B\xB4\x9B\x09\xE4\x6F\x01\x6B\x3A\x92\x6F\x09\x61\x80\xAB\xCB\x28\x3F\xD1\x15\x71\x4B\x90\xB3\xC0\xEF\xC8\xF2\x17\xA2\xC8\xB7\x84\x38\x89\xFD\xCC\xDB\x29\xBF\x80\x33\x51\xE5\x5B\x42\x3C\x8C\x10\x20\xE8\xD0\x1F\x7A\xBC\xDB\x15\x58\x57\x46\x3D\xA4\xC8\x3B\x00\xF0\x6F\x2B\xDD\x6D\xF6\x86\x14\x85\x8C\xC0\xBE\x90\x8E\x1C\x18\x06\x36\xF9\x16\x85\x04\xD8\x13\x50\xE3\x82\x91\x34\xEA\x5B\xB4\x92\x02\x04\xB5\xED\x15\x80\xEC\xCD\xE8\x73\x74\xF4\xC5\x7B\x1E\xF8\x8E\xC0\x76\x49\xEB\x7D\x3B\xF1\x60\x14\xCF\x0F\x5F\xBE\x01\x7C\xEE\xD0\xA4\xB2\xE5\xF6\x84\xB2\xF3\xAE\x0B\x7D\x92\xB6\x7A\x3A\xB9\x03\xDC\x70\x78\x21\xBD\x60\xD1\x19\x16\xE8\x05\x2E\x02\x4D\x87\xFA\x63\x31\x03\x5C\x2F\xE9\xF8\x23\x70\x9A\x92\x1D\x24\x30\x08\xDC\x01\xFE\x94\xB4\x73\x2A\x66\x80\x03\xB4\x6F\xE6\xBE\x03\x57\x80\x0D\x1E\xED\xEC\x06\x1E\x59\xE4\x7F\x02\xC3\xD1\x02\xE4\x9D\x37\x80\x69\xB2\xCD\xD7\x7D\x60\xA8\x83\xB6\x0E\x03\xAF\x72\xF9\x59\xE0\x68\x17\x55\x97\x0F\xA0\x96\xDA\xA1\xA2\xA2\x22\x11\x7F\x01\x4A\x39\xBD\xF2\x1A\xCF\x69\xD0\x00\x00\x00\x00\x49\x45\x4E\x44\xAE\x42\x60\x82"
 }
-
 exibir_menu = imgui.new.bool(false)
 l_t, a_t = getScreenResolution()
 C_B, C_P, C_C, C_F = 0xFFFFFFFF, 0xFF000000, 0xFF444444, 0xCC050505
 t_a, u_t = 0, os.clock()
-a_p, l_l, l_c, esp = 550, 280, 650, 25
+a_p, l_l, l_c, esp = 570, 245, 660, 8
 l_tot = l_l + l_c + esp
 j_x, j_y = (l_t - l_tot)/2, (a_t - a_p)/2
 arr, a_ox, a_oy = false, 0, 0
-
 function t_som()
     local p = PLAYER_PED
     if p then local x,y,z = getCharCoordinates(p); addOneOffSound(x,y,z,1149) end
 end
-
 imgui.OnFrame(function()
     imgui.GetIO().MouseDrawCursor = exibir_menu[0]
     return exibir_menu[0]
@@ -2319,62 +2563,66 @@ end, function()
     imgui.SetNextWindowPos(imgui.ImVec2(j_x, j_y))
     imgui.SetNextWindowSize(imgui.ImVec2(l_tot, a_p))
     imgui.Begin("##menu", nil, 31)
+    if fMenu then imgui.PushFont(fMenu) end
     local DL = imgui.GetWindowDrawList()
-    if imgui.IsWindowHovered() and io.MouseDown[0] and not arr then
-        if not imgui.IsAnyItemActive() then arr = true; a_ox, a_oy = io.MousePos.x - j_x, io.MousePos.y - j_y end
+    if imgui.IsWindowHovered() and io.MouseDown[0] and not arr and not imgui.IsAnyItemActive() then
+        arr = true
+        a_ox, a_oy = io.MousePos.x - j_x, io.MousePos.y - j_y
     end
     if arr then
         if io.MouseDown[0] then j_x, j_y = io.MousePos.x - a_ox, io.MousePos.y - a_oy else arr = false end
     end
-    local p_e, p_c = 0, l_l + esp
-    DL:AddRectFilled(imgui.ImVec2(j_x+p_e, j_y), imgui.ImVec2(j_x+p_e+l_l, j_y+a_p), C_F)
-    DL:AddRectFilled(imgui.ImVec2(j_x+p_c, j_y), imgui.ImVec2(j_x+p_c+l_c, j_y+a_p), C_F)
-    local function d_b(ico, txt, dy, id, tid)
-        imgui.SetCursorPos(imgui.ImVec2(p_e+(l_l-180)/2, dy))
-        imgui.InvisibleButton(id, imgui.ImVec2(180, 45))
+    local bg = u32(V4(0.005,0.005,0.005,0.98))
+    local border = u32(V4(0.28,0.28,0.28,1))
+    local red = u32(V4(0.80,0.00,0.02,1))
+    local muted = u32(V4(0.72,0.72,0.72,1))
+    local white = u32(V4(0.95,0.95,0.95,1))
+    DL:AddRectFilled(V2(j_x, j_y), V2(j_x+l_tot, j_y+a_p), bg, 18)
+    DL:AddRect(V2(j_x+2, j_y+2), V2(j_x+l_tot-2, j_y+a_p-2), border, 18, 0, 3)
+    local title = "HasleHud"
+    local titleSize = imgui.CalcTextSize(title)
+    DL:AddText(V2(j_x+(l_tot-titleSize.x)*0.5, j_y+24), white, title)
+    local sideX, sideY, sideW = j_x+12, j_y+78, l_l-24
+    local panelX, panelY = j_x+l_l+esp+6, j_y+78
+    local panelW, panelH = l_c-12, a_p-104
+    DL:AddRectFilled(V2(panelX, panelY), V2(panelX+panelW, panelY+panelH), u32(V4(0.002,0.002,0.002,0.96)), 12)
+    DL:AddRect(V2(panelX, panelY), V2(panelX+panelW, panelY+panelH), u32(V4(0.65,0.00,0.02,0.95)), 12, 0, 2)
+    local function sideButton(ico, txt, tid, id, y)
+        local selected = curT[0] == tid
+        local h = 54
+        local bx, by = sideX, sideY + y
+        local fill = selected and u32(V4(0.10,0.10,0.10,1)) or u32(V4(0.02,0.02,0.02,0))
+        if selected then
+            DL:AddRectFilled(V2(bx,by), V2(bx+sideW,by+h), fill, 12)
+            DL:AddRect(V2(bx,by), V2(bx+sideW,by+h), u32(V4(0.25,0.25,0.25,1)), 12, 0, 1)
+            DL:AddRectFilled(V2(bx,by), V2(bx+3,by+h), red, 2)
+        end
+        imgui.SetCursorPos(V2(bx-j_x, by-j_y))
+        imgui.InvisibleButton(id, V2(sideW,h))
         if imgui.IsItemClicked() then t_som(); curT[0] = tid end
-        local c = (curT[0] == tid) and C_C or (imgui.IsItemActive() and C_C or C_B)
-        local pf = imgui.ImVec2(j_x+p_e+(l_l-180)/2, j_y+dy)
-        DL:AddRectFilled(pf, imgui.ImVec2(pf.x+180, pf.y+45), c, 5)
-        local tc = ico and (ico.." "..txt) or txt
+        local tc = ico .. "  " .. txt
         local ts = imgui.CalcTextSize(tc)
-        DL:AddText(imgui.ImVec2(pf.x+(180-ts.x)/2, pf.y+(45-ts.y)/2), C_P, tc)
+        DL:AddText(V2(bx+28, by+(h-ts.y)*0.5), selected and red or white, tc)
     end
-    d_b(fa("user"), "PLAYER / GERAL", 80, "b1", 1)
-    d_b(fa("palette"), "CORES", 145, "b2", 2)
-    d_b(fa("crosshairs"), "MIRAS", 210, "b3", 3)
-    d_b(fa("plus"), "EXTRAS", 275, "b4", 4)
-    -- Botão Fechar (Tamanho Original)
-    local bW_f = 180
-    imgui.SetCursorPos(imgui.ImVec2(p_e+(l_l-bW_f)/2, 440))
-    imgui.InvisibleButton("close", imgui.ImVec2(bW_f, 45))
-    if imgui.IsItemClicked() then t_som(); exibir_menu[0] = false end
-    local pf_c = imgui.ImVec2(j_x+p_e+(l_l-bW_f)/2, j_y+440)
-    DL:AddRectFilled(pf_c, imgui.ImVec2(pf_c.x+bW_f, pf_c.y+45), imgui.IsItemActive() and C_C or C_B, 5)
-    local ts_f = imgui.CalcTextSize(T("fch"))
-    DL:AddText(imgui.ImVec2(pf_c.x+(bW_f-ts_f.x)/2, pf_c.y+(45-ts_f.y)/2), C_P, T("fch"))
-
-    -- Botão Tradutor (Subido e com menu flutuante externo)
-    local bW_l = 45
-    local bH_l = 45
-    -- Posicionado um pouco acima do botão fechar, no canto da barra lateral
-    imgui.SetCursorPos(imgui.ImVec2(p_e+(l_l-bW_l)/2, 385)) 
-    imgui.InvisibleButton("lang_toggle", imgui.ImVec2(bW_l, bH_l))
+    sideButton(fa("vest"), "Capa", 5, "##side_capa", 0)
+    sideButton(fa("user"), "Hud", 1, "##side_hud", 56)
+    sideButton(fa("palette"), "Cores", 2, "##side_cores", 112)
+    sideButton(fa("crosshairs"), "Miras", 3, "##side_miras", 168)
+    sideButton(fa("plus"), "Extras", 4, "##side_extras", 224)
+    local langY = sideY + 294
+    imgui.SetCursorPos(V2(sideX-j_x, langY-j_y))
+    imgui.InvisibleButton("lang_toggle", V2(sideW, 34))
     if imgui.IsItemClicked() then t_som(); showLangMenu = not showLangMenu end
-    local pf_l = imgui.ImVec2(j_x+p_e+(l_l-bW_l)/2, j_y+385)
-    DL:AddRectFilled(pf_l, imgui.ImVec2(pf_l.x+bW_l, pf_l.y+bH_l), showLangMenu and C_C or C_B, 5)
-    local ico_l = fa("language")
-    local ts_l = imgui.CalcTextSize(ico_l)
-    DL:AddText(imgui.ImVec2(pf_l.x+(bW_l-ts_l.x)/2, pf_l.y+(bH_l-ts_l.y)/2), C_P, ico_l)
-
+    local langTxt = fa("language") .. "  " .. ({"BR","EN","ES","AB"})[idioma[0]+1]
+    DL:AddText(V2(sideX+28, langY+8), muted, langTxt)
     if showLangMenu then
-        imgui.SetNextWindowPos(imgui.ImVec2(j_x - 70, j_y + 385))
-        imgui.SetNextWindowSize(imgui.ImVec2(65, 200))
-        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.06, 0.06, 0.06, 0.95))
-        imgui.Begin("##lang_float", nil, 16 + 64 + 128) -- NoTitle, NoResize, NoMove
+        imgui.SetNextWindowPos(imgui.ImVec2(sideX, langY+34))
+        imgui.SetNextWindowSize(imgui.ImVec2(sideW, 180))
+        imgui.PushStyleColor(imgui.Col.WindowBg, imgui.ImVec4(0.03,0.03,0.03,0.98))
+        imgui.Begin("##lang_float", nil, 16 + 64 + 128)
         local langs = {"BR", "EN", "ES", "AB"}
-        for i, l in ipairs(langs) do
-            if imgui.Button(l.."##opt"..i, imgui.ImVec2(50, 40)) then
+        for i, langName in ipairs(langs) do
+            if imgui.Button(langName.."##opt"..i, imgui.ImVec2(sideW-20, 34)) then
                 idioma[0] = i - 1
                 showLangMenu = false
                 qSave()
@@ -2383,25 +2631,24 @@ end, function()
         imgui.End()
         imgui.PopStyleColor()
     end
-    imgui.SetCursorPos(imgui.ImVec2(p_c+15, 15))
-    imgui.BeginChild("##cont", imgui.ImVec2(l_c-30, a_p-30), false)
-    if curT[0]==1 then DrawGeralT(DL) elseif curT[0]==2 then DrawCoresT() elseif curT[0]==3 then DrawMirasT() elseif curT[0]==4 then DrawExtraT(DL); imgui.Spacing(); DrawCreditosT() end
+    local closeY = j_y+a_p-62
+    imgui.SetCursorPos(V2(sideX-j_x, closeY-j_y))
+    imgui.InvisibleButton("close", V2(sideW, 48))
+    local closeActive = imgui.IsItemActive()
+    if imgui.IsItemClicked() then t_som(); exibir_menu[0] = false end
+    DL:AddRectFilled(V2(sideX,closeY), V2(sideX+sideW,closeY+48), closeActive and u32(V4(0.12,0.12,0.12,1)) or u32(V4(0.04,0.04,0.04,1)), 8)
+    DL:AddRect(V2(sideX,closeY), V2(sideX+sideW,closeY+48), u32(V4(0.25,0.25,0.25,1)), 8, 0, 1)
+    local closeText = "X  " .. T("fch")
+    local closeSize = imgui.CalcTextSize(closeText)
+    DL:AddText(V2(sideX+(sideW-closeSize.x)*0.5, closeY+(48-closeSize.y)*0.5), red, closeText)
+    DL:AddText(V2(sideX+4, j_y+a_p-16), muted, "Shellder  •  Jhow Mods")
+    imgui.SetCursorPos(V2(panelX-j_x+10, panelY-j_y+10))
+    imgui.PushStyleColor(imgui.Col.ChildBg, imgui.ImVec4(0,0,0,0))
+    imgui.BeginChild("##cont", imgui.ImVec2(panelW-20, panelH-20), false, imgui.WindowFlags.AlwaysVerticalScrollbar)
+    if curT[0]==1 then DrawGeralT(DL) elseif curT[0]==2 then DrawCoresT() elseif curT[0]==3 then DrawMirasT() elseif curT[0]==4 then DrawExtraT(DL); imgui.Spacing(); DrawCreditosT() elseif curT[0]==5 then DrawCapaT(DL) end
     imgui.EndChild()
-    local per, t_l = (l_tot*2)+(a_p*2), 120
-    local v = (t_a*150)%per
-    local function gP(p)
-        p = p % per
-        if p < l_tot then return j_x+p, j_y
-        elseif p < l_tot+a_p then return j_x+l_tot, j_y+(p-l_tot)
-        elseif p < (l_tot*2)+a_p then return j_x+l_tot-(p-l_tot-a_p), j_y+a_p
-        else return j_x, j_y+a_p-(p-(l_tot*2)-a_p) end
-    end
-    local a_b = math.floor((math.sin(t_a*2)*0.5+0.5)*100+155)
-    local c_r = bit.bor(bit.lshift(a_b, 24), 0xFFFFFF)
-    for i=1,8 do
-        local p1,p2 = v+((i-1)*15), v+(i*15)
-        local x1,y1 = gP(p1); local x2,y2 = gP(p2)
-        DL:AddLine(imgui.ImVec2(x1,y1), imgui.ImVec2(x2,y2), c_r, 3.0)
-    end
-    imgui.End(); imgui.PopStyleColor()
+    imgui.PopStyleColor()
+    imgui.End()
+    if fMenu then imgui.PopFont() end
+    imgui.PopStyleColor()
 end)
